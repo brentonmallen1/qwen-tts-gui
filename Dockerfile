@@ -51,11 +51,11 @@ COPY backend/ .
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static
 
-# Create non-root user for security
+# Create non-root user for security (handle existing GID/UID gracefully)
 ARG PUID=1000
 ARG PGID=1000
-RUN groupadd -g ${PGID} appgroup && \
-    useradd -u ${PUID} -g appgroup -m -s /bin/bash appuser
+RUN groupadd -g ${PGID} appgroup 2>/dev/null || true && \
+    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser 2>/dev/null || true
 
 # Create directories for volumes and set ownership
 RUN mkdir -p /models /cache /output /personalities && \
