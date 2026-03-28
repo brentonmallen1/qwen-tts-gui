@@ -98,4 +98,81 @@ init:
 
 # Check if Docker GPU is working
 check-gpu:
-    docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+    docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu24.04 nvidia-smi
+
+# ─────────────────────────────────────────────────────────
+# Release
+# ─────────────────────────────────────────────────────────
+
+# Generate CalVer version (YYYY.MM.DD or YYYY.MM.DD.N for multiple releases per day)
+_calver:
+    #!/usr/bin/env bash
+    TODAY=$(date +%Y.%m.%d)
+    # Check for existing tags with today's date
+    EXISTING=$(git tag -l "${TODAY}*" 2>/dev/null | sort -V | tail -1)
+    if [ -z "$EXISTING" ]; then
+        echo "$TODAY"
+    elif [ "$EXISTING" = "$TODAY" ]; then
+        echo "${TODAY}.1"
+    else
+        # Extract patch number and increment
+        PATCH=$(echo "$EXISTING" | sed "s/${TODAY}\.//")
+        echo "${TODAY}.$((PATCH + 1))"
+    fi
+
+# Show what version would be released
+version:
+    @echo "Next version: $(just _calver)"
+
+# Build and push release to registry
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Load registry from .env
+    if [ -f .env ]; then
+        source .env
+    fi
+
+    if [ -z "${DOCKER_REGISTRY:-}" ]; then
+        echo "Error: DOCKER_REGISTRY not set in .env"
+        echo "Example: DOCKER_REGISTRY=docker.io/username"
+        exit 1
+    fi
+
+    VERSION=$(just _calver)
+    IMAGE="${DOCKER_REGISTRY}/qwen-tts"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Releasing qwen-tts v${VERSION}"
+    echo "Image: ${IMAGE}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Build for linux/amd64 and push
+    docker buildx build \
+        --platform linux/amd64 \
+        --tag "${IMAGE}:${VERSION}" \
+        --tag "${IMAGE}:latest" \
+        --push \
+        .
+
+    # Create git tag
+    git tag -a "${VERSION}" -m "Release ${VERSION}"
+    git push origin "${VERSION}"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Released ${IMAGE}:${VERSION}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Build release locally without pushing (for testing)
+release-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VERSION=$(just _calver)
+    echo "Building qwen-tts:${VERSION} locally..."
+    docker buildx build \
+        --platform linux/amd64 \
+        --tag "qwen-tts:${VERSION}" \
+        --tag "qwen-tts:latest" \
+        --load \
+        .

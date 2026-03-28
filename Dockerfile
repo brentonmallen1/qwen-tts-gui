@@ -15,16 +15,16 @@ COPY frontend/ .
 # Build frontend
 RUN npm run build
 
-# Stage 2: Python runtime with CUDA
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04 AS runtime
+# Stage 2: Python runtime with CUDA (Ubuntu 24.04 has Python 3.12 built-in)
+FROM nvidia/cuda:12.4.0-runtime-ubuntu24.04 AS runtime
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-venv \
+    python3 \
+    python3-venv \
     libsndfile1 \
     ffmpeg \
     curl \
@@ -43,7 +43,7 @@ COPY backend/pyproject.toml backend/uv.lock* ./
 RUN uv sync --extra tts --frozen --no-dev
 
 # Install FlashAttention (optional, may fail on some systems)
-RUN uv pip install flash-attn --no-build-isolation || echo "FlashAttention not available"
+RUN uv pip install flash-attn --no-build-isolation 2>/dev/null || echo "FlashAttention not available, continuing..."
 
 # Copy backend code
 COPY backend/ .

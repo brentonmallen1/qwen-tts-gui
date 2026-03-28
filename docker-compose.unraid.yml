@@ -1,12 +1,15 @@
+# Qwen-TTS Docker Compose for Unraid
+# Pulls pre-built image from registry instead of building locally
+#
+# Usage:
+#   1. Copy this file and .env.example to your Unraid appdata folder
+#   2. Rename .env.example to .env and configure
+#   3. Set DOCKER_REGISTRY in .env to match your published image
+#   4. Run: docker-compose -f docker-compose.unraid.yml up -d
+
 services:
   qwen-tts:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - PUID=${PUID:-1000}
-        - PGID=${PGID:-1000}
-    image: qwen-tts:latest
+    image: ${DOCKER_REGISTRY}/qwen-tts:${IMAGE_TAG:-latest}
     container_name: qwen-tts
 
     # GPU Configuration
@@ -26,7 +29,7 @@ services:
     # Volume mounts for persistence
     volumes:
       # Model cache - stores downloaded HuggingFace models (2-5GB per model)
-      - ${MODELS_PATH:-./data/models}:/models
+      - ${MODELS_PATH:-./models}:/models
       # Audio cache - temporary uploaded files
       - ${DATA_PATH:-./data}/cache:/cache
       # Output - generated audio files
@@ -52,9 +55,22 @@ services:
       - DEFAULT_MODEL_SIZE=${DEFAULT_MODEL_SIZE:-1.7B}
       - PRELOAD_MODELS=${PRELOAD_MODELS:-false}
 
+      # Authentication
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-}
+
+      # Security
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE:-52428800}
+      - ALLOWED_AUDIO_TYPES=${ALLOWED_AUDIO_TYPES:-audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+
       # Personalities and Whisper
       - PERSONALITIES_PATH=/personalities
       - WHISPER_MODEL=${WHISPER_MODEL:-base}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
 
       # Unraid compatibility
       - PUID=${PUID:-99}

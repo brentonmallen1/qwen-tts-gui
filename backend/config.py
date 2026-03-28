@@ -1,4 +1,3 @@
-import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -48,7 +47,9 @@ class Settings(BaseSettings):
     # Security
     max_upload_size: int = 52428800  # 50MB in bytes
     allowed_origins: str = ""  # Comma-separated list, empty = localhost-only (dev)
-    allowed_audio_types: str = "audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav"
+    allowed_audio_types: str = (
+        "audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav"
+    )
 
     @property
     def audio_types_set(self) -> set[str]:
