@@ -4,10 +4,13 @@
 
 # Dependencies (will be installed in container)
 node_modules/
-__pycache__/
+**/__pycache__/
 *.pyc
 .venv/
 venv/
+**/.venv/
+**/venv/
+backend/.venv/
 
 # Build artifacts
 dist/
