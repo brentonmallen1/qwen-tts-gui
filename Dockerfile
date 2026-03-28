@@ -46,10 +46,10 @@ RUN uv sync --extra tts --frozen --no-dev
 # Install FlashAttention (optional, may fail on some systems)
 RUN uv pip install flash-attn --no-build-isolation 2>/dev/null || echo "FlashAttention not available, continuing..."
 
-# Copy backend code, but preserve the .venv created by uv sync
-RUN mv .venv /tmp/.venv-backup
-COPY backend/ .
-RUN rm -rf .venv && mv /tmp/.venv-backup .venv
+# Copy backend code (explicit files to avoid .venv)
+COPY backend/*.py ./
+COPY backend/api ./api
+COPY backend/services ./services
 
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static
