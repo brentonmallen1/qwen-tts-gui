@@ -51,15 +51,16 @@ COPY backend/ .
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static
 
-# Create non-root user for security (handle existing GID/UID gracefully)
+# Create non-root user for security
 ARG PUID=1000
 ARG PGID=1000
-RUN groupadd -g ${PGID} appgroup 2>/dev/null || true && \
-    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser 2>/dev/null || true
+RUN groupadd -g ${PGID} appgroup 2>/dev/null; \
+    useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser 2>/dev/null; \
+    exit 0
 
-# Create directories for volumes and set ownership
+# Create directories for volumes and set ownership (use numeric IDs for robustness)
 RUN mkdir -p /models /cache /output /personalities && \
-    chown -R appuser:appgroup /app /models /cache /output /personalities
+    chown -R ${PUID}:${PGID} /app /models /cache /output /personalities
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
@@ -76,7 +77,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:7860/api/health || exit 1
 
 # Switch to non-root user
-USER appuser
+# Switch to non-root user (use numeric UID for robustness)
+USER ${PUID}
 
 # Run the application
 CMD ["uv", "run", "python", "main.py"]
