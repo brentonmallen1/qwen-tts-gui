@@ -98,7 +98,7 @@ init:
 
 # Check if Docker GPU is working
 check-gpu:
-    docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu24.04 nvidia-smi
+    docker run --rm --gpus all nvidia/cuda:12.9.0-base-ubuntu24.04 nvidia-smi
 
 # ─────────────────────────────────────────────────────────
 # Release
