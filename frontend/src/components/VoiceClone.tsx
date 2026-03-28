@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Loader2, Play, X } from 'lucide-react'
-import { FileUpload } from './FileUpload'
+import { AudioEditor } from './AudioEditor'
 import { AudioPlayer } from './AudioPlayer'
 import { ModelSizeSelector } from './ModelSizeSelector'
 import { useTTS } from '../hooks/useTTS'
@@ -16,14 +16,50 @@ export function VoiceClone() {
   const [text, setText] = useState('')
   const [language, setLanguage] = useState('English')
   const [refText, setRefText] = useState('')
-  const [refAudio, setRefAudio] = useState<File | null>(null)
+  const [refAudio, setRefAudio] = useState<Blob | null>(null)
   const [modelSize, setModelSize] = useState(enabledModelSizes[0] || '0.6B')
+  const [isTranscribing, setIsTranscribing] = useState(false)
 
   const { isLoading, error, result, generateClone, cancelGeneration } = useTTS()
 
   const handleModelSizeChange = useCallback((size: string) => {
     setModelSize(size)
   }, [])
+
+  const handleAudioChange = useCallback((blob: Blob | null) => {
+    setRefAudio(blob)
+    if (!blob) {
+      setRefText('')
+    }
+  }, [])
+
+  const handleTranscribe = useCallback(async () => {
+    if (!refAudio) return
+
+    setIsTranscribing(true)
+    try {
+      const formData = new FormData()
+      formData.append('audio', refAudio, 'audio.wav')
+
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Transcription failed')
+      }
+
+      const data = await response.json()
+      if (data.transcript) {
+        setRefText(data.transcript)
+      }
+    } catch (err) {
+      console.error('Transcription error:', err)
+    } finally {
+      setIsTranscribing(false)
+    }
+  }, [refAudio])
 
   const handleGenerate = async () => {
     if (!text.trim() || !refAudio || !refText.trim()) return
@@ -33,7 +69,7 @@ export function VoiceClone() {
     formData.append('language', language)
     formData.append('ref_text', refText)
     formData.append('model_size', modelSize)
-    formData.append('ref_audio', refAudio)
+    formData.append('ref_audio', refAudio, 'reference.wav')
 
     await generateClone(formData)
   }
@@ -67,31 +103,15 @@ export function VoiceClone() {
             <p id="clone-text-count" className="text-xs text-slate-500 mt-1">{text.length}/5000 characters</p>
           </div>
 
-          {/* Reference Audio Upload */}
-          <FileUpload
-            onFileSelect={setRefAudio}
+          {/* Reference Audio with Editor */}
+          <AudioEditor
+            onAudioChange={handleAudioChange}
+            transcript={refText}
+            onTranscriptChange={setRefText}
+            onTranscribe={refAudio ? handleTranscribe : undefined}
+            isTranscribing={isTranscribing}
             label="Reference Audio (3-20 seconds)"
           />
-
-          {/* Reference Text */}
-          <div>
-            <label htmlFor="clone-ref-text" className="block text-sm font-medium text-slate-300 mb-2">
-              Reference Audio Transcript
-            </label>
-            <textarea
-              id="clone-ref-text"
-              value={refText}
-              onChange={(e) => setRefText(e.target.value)}
-              placeholder="Enter the exact transcript of the reference audio..."
-              rows={2}
-              className="textarea-field"
-              maxLength={2000}
-              aria-describedby="clone-ref-text-hint"
-            />
-            <p id="clone-ref-text-hint" className="text-xs text-slate-500 mt-1">
-              Provide the exact words spoken in the reference audio for best results
-            </p>
-          </div>
 
           {/* Language */}
           <div>

@@ -91,6 +91,13 @@ async def generate_clone(
             detail=f"File too large. Maximum size is {max_mb}MB"
         )
 
+    # Validate MIME type
+    if ref_audio.content_type and ref_audio.content_type not in settings.audio_types_set:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type '{ref_audio.content_type}'. Allowed: WAV, MP3"
+        )
+
     # Validate inputs
     if language not in [l.value for l in Language]:
         raise HTTPException(status_code=400, detail=f"Invalid language: {language}")

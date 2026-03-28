@@ -1,7 +1,7 @@
-import { Mic, Sparkles, Users } from 'lucide-react'
+import { Mic, Sparkles, Users, UserCircle, Play } from 'lucide-react'
 import { useAppConfig } from '../context/ConfigContext'
 
-export type TabType = 'clone' | 'design' | 'custom'
+export type TabType = 'clone' | 'design' | 'custom' | 'personalities' | 'personality-generate'
 
 interface TabNavProps {
   activeTab: TabType
@@ -12,6 +12,8 @@ const tabs = [
   { id: 'clone' as const, label: 'Voice Clone', icon: Mic, requires1_7B: false },
   { id: 'design' as const, label: 'Voice Design', icon: Sparkles, requires1_7B: true },
   { id: 'custom' as const, label: 'Custom Voice', icon: Users, requires1_7B: false },
+  { id: 'personalities' as const, label: 'Personalities', icon: UserCircle, requires1_7B: false },
+  { id: 'personality-generate' as const, label: 'Generate', icon: Play, requires1_7B: false },
 ]
 
 export function TabNav({ activeTab, onTabChange }: TabNavProps) {

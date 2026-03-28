@@ -15,8 +15,8 @@ frontend/dist/
 
 # Environment
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Data directories (volume mounts)
 data/

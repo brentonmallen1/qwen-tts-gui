@@ -11,6 +11,8 @@ A simple, lightweight, self-hosted, Docker-deployable web interface for [Qwen3-T
 - **Voice Cloning** - Clone any voice from 3-20 seconds of reference audio
 - **Voice Design** - Create unique voices from natural language descriptions
 - **Custom Voice** - Use 9 preset speakers with emotional control
+- **Voice Personalities** - Save and reuse cloned voices for quick generation
+- **Audio Editor** - Trim, preview, and auto-transcribe reference audio with waveform visualization
 - **Multi-language** - Support for 10 languages (Chinese, English, Japanese, Korean, and more)
 - **GPU Accelerated** - CUDA support with FlashAttention for efficient inference
 - **Self-hosted** - Full Docker Compose setup for easy deployment
@@ -84,6 +86,8 @@ The first run will download the models (~2-5GB each) which may take several minu
 | `MODEL_PATH` | `./data/models` | HuggingFace model cache |
 | `CACHE_PATH` | `./data/cache` | Temporary file cache |
 | `OUTPUT_PATH` | `./data/output` | Generated audio output |
+| `PERSONALITIES_PATH` | `./data/personalities` | Saved voice personalities |
+| `WHISPER_MODEL` | `base` | Whisper model for transcription (tiny/base/small/medium/large-v3) |
 | `PUID` / `PGID` | `99` / `100` | User/Group ID for Unraid |
 | `TZ` | `America/New_York` | Timezone |
 
@@ -151,19 +155,75 @@ This container is designed for easy Unraid deployment:
 4. Select language and model size
 5. Click Generate
 
+### Personalities (Voice Presets)
+
+Create reusable voice personalities from audio samples for consistent voice cloning without re-uploading reference audio each time.
+
+#### Creating a Personality
+
+1. Navigate to the **Personalities** tab
+2. Click **New Personality**
+3. Enter a name and optional description
+4. Select the language for this voice
+5. Upload a reference audio clip (3-20 seconds, clear speech)
+6. Use the waveform editor to trim if needed
+7. Click **Auto-Transcribe** to generate transcript, or enter manually
+8. Click **Create Personality**
+
+#### Generating with Personalities
+
+1. Navigate to the **Generate** tab (with Play icon)
+2. Select a personality from the dropdown
+3. Enter the text you want to generate
+4. Choose model size (0.6B faster, 1.7B higher quality)
+5. Click Generate
+6. Download or play the result
+
+#### Whisper Transcription
+
+Audio transcription uses faster-whisper. Configure the model size via `WHISPER_MODEL`:
+
+| Model | Size | Speed | Accuracy |
+|-------|------|-------|----------|
+| tiny | ~75MB | Fastest | Basic |
+| base | ~150MB | Fast | Good (default) |
+| small | ~500MB | Medium | Better |
+| medium | ~1.5GB | Slow | High |
+| large-v3 | ~3GB | Slowest | Best |
+
+#### Storage
+
+Personalities are stored in the mounted volume at `PERSONALITIES_PATH` (default: `./data/personalities/`). Each personality has its own folder containing metadata, audio, and transcript files.
+
 ## API
 
 The backend exposes a REST API:
 
 ```
-POST /api/generate/clone   - Voice cloning (multipart form)
-POST /api/generate/design  - Voice design (JSON)
-POST /api/generate/custom  - Custom voice (JSON)
-GET  /api/audio/{filename} - Download generated audio
-GET  /api/health           - Health check
-GET  /api/models           - List available models
-GET  /api/speakers         - Get preset speakers
-GET  /api/languages        - Get supported languages
+# Generation
+POST /api/generate/clone        - Voice cloning (multipart form)
+POST /api/generate/design       - Voice design (JSON)
+POST /api/generate/custom       - Custom voice (JSON)
+POST /api/generate/personality  - Generate with saved personality (multipart form)
+
+# Personalities
+GET    /api/personalities              - List all personalities
+POST   /api/personalities              - Create personality (multipart form)
+GET    /api/personalities/{id}         - Get personality details
+PATCH  /api/personalities/{id}         - Update personality metadata (JSON)
+PUT    /api/personalities/{id}/audio   - Update personality audio (multipart form)
+DELETE /api/personalities/{id}         - Delete personality
+GET    /api/personalities/{id}/audio   - Get personality reference audio
+
+# Transcription
+POST /api/transcribe            - Transcribe audio with Whisper (multipart form)
+
+# Utility
+GET  /api/audio/{filename}      - Download generated audio
+GET  /api/health                - Health check
+GET  /api/models                - List available models
+GET  /api/speakers              - Get preset speakers
+GET  /api/languages             - Get supported languages
 ```
 
 ## Development

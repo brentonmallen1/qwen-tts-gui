@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import base64
 
 from api.routes import router
+from api.personality_routes import router as personality_router, transcribe_router, generate_router
 from config import get_settings
 from logging_config import setup_logging, RequestLoggingMiddleware, get_logger
 
@@ -141,12 +142,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # Include API routes
 app.include_router(router)
+app.include_router(personality_router)
+app.include_router(transcribe_router)
+app.include_router(generate_router)
 
 # Serve static frontend files (in production)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -161,8 +176,15 @@ if os.path.exists(STATIC_DIR):
     async def serve_frontend_routes(path: str):
         # Try to serve the file if it exists
         file_path = os.path.join(STATIC_DIR, path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
+        real_path = os.path.realpath(file_path)
+        real_static = os.path.realpath(STATIC_DIR)
+
+        # Security: prevent path traversal attacks
+        if not real_path.startswith(real_static + os.sep) and real_path != real_static:
+            return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+        if os.path.exists(real_path) and os.path.isfile(real_path):
+            return FileResponse(real_path)
         # Otherwise serve index.html for client-side routing
         return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 

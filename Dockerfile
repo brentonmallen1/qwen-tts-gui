@@ -58,8 +58,8 @@ RUN groupadd -g ${PGID} appgroup && \
     useradd -u ${PUID} -g appgroup -m -s /bin/bash appuser
 
 # Create directories for volumes and set ownership
-RUN mkdir -p /models /cache /output && \
-    chown -R appuser:appgroup /app /models /cache /output
+RUN mkdir -p /models /cache /output /personalities && \
+    chown -R appuser:appgroup /app /models /cache /output /personalities
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1

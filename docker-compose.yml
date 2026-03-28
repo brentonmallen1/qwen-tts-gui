@@ -27,12 +27,14 @@ services:
 
     # Volume mounts for persistence
     volumes:
-      # Model cache - stores downloaded HuggingFace models
-      - ${MODEL_PATH:-./data/models}:/models
+      # Model cache - stores downloaded HuggingFace models (2-5GB per model)
+      - ${MODELS_PATH:-./data/models}:/models
       # Audio cache - temporary uploaded files
-      - ${CACHE_PATH:-./data/cache}:/cache
+      - ${DATA_PATH:-./data}/cache:/cache
       # Output - generated audio files
-      - ${OUTPUT_PATH:-./data/output}:/output
+      - ${DATA_PATH:-./data}/output:/output
+      # Personalities - saved voice personalities for reuse
+      - ${DATA_PATH:-./data}/personalities:/personalities
 
     # Environment variables
     environment:
@@ -51,6 +53,10 @@ services:
       - USE_FLASH_ATTENTION=${USE_FLASH_ATTENTION:-true}
       - DEFAULT_MODEL_SIZE=${DEFAULT_MODEL_SIZE:-1.7B}
       - PRELOAD_MODELS=${PRELOAD_MODELS:-false}
+
+      # Personalities and Whisper
+      - PERSONALITIES_PATH=/personalities
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
 
       # Unraid compatibility
       - PUID=${PUID:-99}

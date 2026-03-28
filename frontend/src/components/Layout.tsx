@@ -30,7 +30,7 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="flex items-center gap-2">
             <a
-              href="https://github.com/QwenLM/Qwen3-TTS"
+              href="https://github.com/brentonmallen1/qwen-tts-gui"
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"

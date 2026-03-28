@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     model_path: str = "./data/models"
     cache_path: str = "./data/cache"
     output_path: str = "./data/output"
+    personalities_path: str = "./data/personalities"
+
+    # Whisper transcription
+    # Options: tiny (~75MB), base (~150MB), small (~500MB), medium (~1.5GB), large-v3 (~3GB)
+    whisper_model: str = "base"
 
     # GPU
     cuda_visible_devices: str = "0"
@@ -42,7 +47,13 @@ class Settings(BaseSettings):
 
     # Security
     max_upload_size: int = 52428800  # 50MB in bytes
-    allowed_origins: str = ""  # Comma-separated list, empty = allow all (dev only)
+    allowed_origins: str = ""  # Comma-separated list, empty = localhost-only (dev)
+    allowed_audio_types: str = "audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav"
+
+    @property
+    def audio_types_set(self) -> set[str]:
+        """Parse allowed audio types into a set."""
+        return {t.strip() for t in self.allowed_audio_types.split(",") if t.strip()}
 
     # Logging
     log_level: str = "INFO"
