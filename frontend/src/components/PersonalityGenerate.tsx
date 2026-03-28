@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { Loader2, Play, X, User, AlertCircle } from 'lucide-react'
 import { AudioPlayer } from './AudioPlayer'
 import { ModelSizeSelector } from './ModelSizeSelector'
-import { usePersonalities, Personality } from '../hooks/usePersonalities'
+import { usePersonalities } from '../hooks/usePersonalities'
 import { useAppConfig } from '../context/ConfigContext'
 
 interface GenerationResult {

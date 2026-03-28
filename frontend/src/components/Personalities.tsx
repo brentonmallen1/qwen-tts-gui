@@ -19,8 +19,11 @@ export function Personalities() {
   const [editingPersonality, setEditingPersonality] = useState<Personality | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const handleCreate = useCallback(async (formData: FormData) => {
-    const result = await createPersonality(formData)
+  const handleCreate = useCallback(async (
+    formData: FormData | { name?: string; description?: string; language?: string },
+    _audioFormData?: FormData
+  ) => {
+    const result = await createPersonality(formData as FormData)
     if (result) {
       setShowForm(false)
     }
@@ -79,7 +82,7 @@ export function Personalities() {
       <PersonalityForm
         personality={editingPersonality}
         onSubmit={editingPersonality
-          ? (data, audioFormData) => handleUpdate(editingPersonality.id, data, audioFormData)
+          ? (data, audioFormData) => handleUpdate(editingPersonality.id, data as { name?: string; description?: string; language?: string }, audioFormData)
           : handleCreate
         }
         onCancel={handleCancelForm}
