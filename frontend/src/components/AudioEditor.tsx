@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Upload, Play, Pause, Scissors, Loader2, FileAudio, X, Wand2 } from 'lucide-react'
+import { useCallback, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
+import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2 } from 'lucide-react'
 import { useAudioEditor } from '../hooks/useAudioEditor'
+
+export interface AudioSelection {
+  start: number
+  end: number
+}
+
+export interface AudioEditorHandle {
+  getSelectedAudio: () => Promise<Blob | null>
+  getSelection: () => AudioSelection
+}
 
 interface AudioEditorProps {
   audioFile?: File | null
   audioUrl?: string
   onAudioChange: (blob: Blob | null) => void
+  onSelectionChange?: (selection: AudioSelection) => void
+  initialSelection?: AudioSelection
   transcript: string
   onTranscriptChange: (text: string) => void
   onTranscribe?: () => Promise<void>
@@ -15,10 +27,11 @@ interface AudioEditorProps {
   label?: string
 }
 
-export function AudioEditor({
+export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(function AudioEditor({
   audioFile,
   audioUrl,
   onAudioChange,
+  onSelectionChange,
   transcript,
   onTranscriptChange,
   onTranscribe,
@@ -26,10 +39,9 @@ export function AudioEditor({
   minDuration = 3,
   maxDuration = 20,
   label = 'Reference Audio',
-}: AudioEditorProps) {
+}, ref) {
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [hasUnsavedTrim, setHasUnsavedTrim] = useState(false)
 
   const {
     waveformRef,
@@ -47,23 +59,26 @@ export function AudioEditor({
     getTrimmedAudio,
   } = useAudioEditor({ minDuration, maxDuration })
 
+  // Expose methods via ref for parent to get selected audio
+  useImperativeHandle(ref, () => ({
+    getSelectedAudio: getTrimmedAudio,
+    getSelection: () => ({ start: regionStart, end: regionEnd }),
+  }), [getTrimmedAudio, regionStart, regionEnd])
+
   // Load audio when file changes
   useEffect(() => {
     const source = audioFile || localFile || audioUrl
     if (source) {
       loadAudio(source)
-      setHasUnsavedTrim(false)
     }
   }, [audioFile, localFile, audioUrl, loadAudio])
 
-  // Track when region changes (unsaved trim)
+  // Notify parent when selection changes
   useEffect(() => {
-    if (isReady && duration > 0) {
-      // Check if region is different from full audio
-      const isFullAudio = regionStart === 0 && Math.abs(regionEnd - duration) < 0.1
-      setHasUnsavedTrim(!isFullAudio)
+    if (isReady && onSelectionChange) {
+      onSelectionChange({ start: regionStart, end: regionEnd })
     }
-  }, [regionStart, regionEnd, duration, isReady])
+  }, [regionStart, regionEnd, isReady, onSelectionChange])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -89,14 +104,6 @@ export function AudioEditor({
     onAudioChange(null)
     onTranscriptChange('')
   }, [onAudioChange, onTranscriptChange])
-
-  const handleApplyTrim = useCallback(async () => {
-    const trimmedBlob = await getTrimmedAudio()
-    if (trimmedBlob) {
-      onAudioChange(trimmedBlob)
-      setHasUnsavedTrim(false)
-    }
-  }, [getTrimmedAudio, onAudioChange])
 
   const hasAudio = audioFile || localFile || audioUrl
   const inputId = `audio-editor-${label.replace(/\s+/g, '-').toLowerCase()}`
@@ -169,19 +176,11 @@ export function AudioEditor({
                       </>
                     )}
                   </button>
-
-                  {hasUnsavedTrim && (
-                    <button
-                      onClick={handleApplyTrim}
-                      disabled={!isValidDuration}
-                      className="btn-secondary flex items-center gap-2"
-                      aria-label="Apply trim"
-                    >
-                      <Scissors className="w-4 h-4" />
-                      Apply Trim
-                    </button>
-                  )}
                 </div>
+
+                <p className="text-xs text-slate-500 mt-3">
+                  Drag the edges of the selection to adjust what will be used
+                </p>
               </>
             )}
           </div>
@@ -196,7 +195,7 @@ export function AudioEditor({
                 <button
                   onClick={onTranscribe}
                   disabled={isTranscribing || !isReady}
-                  className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1 disabled:opacity-50"
+                  className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isTranscribing ? (
                     <>
@@ -268,4 +267,4 @@ export function AudioEditor({
       )}
     </div>
   )
-}
+})

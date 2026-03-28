@@ -30,7 +30,7 @@
 
   .textarea-field {
     @apply w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3
-           text-slate-100 placeholder-slate-500 resize-none
+           text-slate-100 placeholder-slate-500 resize-y min-h-[80px]
            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
            transition-shadow duration-200;
   }

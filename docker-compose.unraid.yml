@@ -45,6 +45,7 @@ services:
 
       # HuggingFace settings
       - HF_HOME=/models
+      - HF_HUB_CACHE=/models
       - TRANSFORMERS_CACHE=/models
       - HF_TOKEN=${HF_TOKEN:-}
 
@@ -83,13 +84,13 @@ services:
     # Restart policy
     restart: unless-stopped
 
-    # Health check
+    # Health check (lenient for model downloads which can take minutes)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 300s
 
     # Logging
     logging:

@@ -77,6 +77,70 @@ preview-frontend:
     cd frontend && npm run preview
 
 # ─────────────────────────────────────────────────────────
+# Model Management
+# ─────────────────────────────────────────────────────────
+
+# Download all TTS models to local cache (run before first use)
+download-models:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Load env for MODELS_PATH
+    if [ -f .env ]; then
+        source .env
+    fi
+
+    MODELS_PATH="${MODELS_PATH:-./data/models}"
+    mkdir -p "$MODELS_PATH"
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Downloading Qwen3-TTS models to: $MODELS_PATH"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # All available models
+    MODELS=(
+        "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+        "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+        "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+        "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+        "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+        "Systran/faster-whisper-base"
+    )
+
+    for MODEL in "${MODELS[@]}"; do
+        echo ""
+        echo "📦 Downloading: $MODEL"
+        echo "─────────────────────────────────────────"
+        HF_HUB_CACHE="$MODELS_PATH" huggingface-cli download "$MODEL"
+    done
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "✅ All models downloaded!"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Download only the base models (voice cloning)
+download-models-base:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f .env ]; then source .env; fi
+    MODELS_PATH="${MODELS_PATH:-./data/models}"
+    mkdir -p "$MODELS_PATH"
+    echo "Downloading base models for voice cloning..."
+    HF_HUB_CACHE="$MODELS_PATH" huggingface-cli download "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+    HF_HUB_CACHE="$MODELS_PATH" huggingface-cli download "Systran/faster-whisper-base"
+    echo "✅ Base models downloaded!"
+
+# Download models inside Docker container
+download-models-docker:
+    docker exec -it qwen-tts python -c "from huggingface_hub import snapshot_download; \
+        models = ['Qwen/Qwen3-TTS-12Hz-1.7B-Base', 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', \
+                  'Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice', \
+                  'Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Systran/faster-whisper-base']; \
+        [print(f'Downloading {m}...') or snapshot_download(m) for m in models]; \
+        print('Done!')"
+
+# ─────────────────────────────────────────────────────────
 # Utilities
 # ─────────────────────────────────────────────────────────
 

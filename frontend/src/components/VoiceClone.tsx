@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
-import { Loader2, Play, X } from 'lucide-react'
-import { AudioEditor } from './AudioEditor'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { Loader2, Play, X, Download } from 'lucide-react'
+import { AudioEditor, AudioEditorHandle } from './AudioEditor'
 import { AudioPlayer } from './AudioPlayer'
 import { ModelSizeSelector } from './ModelSizeSelector'
 import { useTTS } from '../hooks/useTTS'
@@ -11,6 +11,14 @@ const LANGUAGES = [
   'French', 'Russian', 'Portuguese', 'Spanish', 'Italian'
 ]
 
+interface ModelInfo {
+  name: string
+  size: string
+  mode: string
+  loaded: boolean
+  downloaded: boolean
+}
+
 export function VoiceClone() {
   const { enabledModelSizes } = useAppConfig()
   const [text, setText] = useState('')
@@ -19,8 +27,24 @@ export function VoiceClone() {
   const [refAudio, setRefAudio] = useState<Blob | null>(null)
   const [modelSize, setModelSize] = useState(enabledModelSizes[0] || '0.6B')
   const [isTranscribing, setIsTranscribing] = useState(false)
+  const [models, setModels] = useState<ModelInfo[]>([])
+
+  const audioEditorRef = useRef<AudioEditorHandle>(null)
 
   const { isLoading, error, result, generateClone, cancelGeneration } = useTTS()
+
+  // Fetch model status
+  useEffect(() => {
+    fetch('/api/models')
+      .then(res => res.json())
+      .then(data => setModels(data.models || []))
+      .catch(() => {})
+  }, [])
+
+  // Check if current model is downloaded
+  const currentModel = models.find(m => m.mode === 'clone' && m.size === modelSize)
+  const isModelDownloaded = currentModel?.downloaded ?? true
+  const isModelLoaded = currentModel?.loaded ?? false
 
   const handleModelSizeChange = useCallback((size: string) => {
     setModelSize(size)
@@ -34,12 +58,18 @@ export function VoiceClone() {
   }, [])
 
   const handleTranscribe = useCallback(async () => {
-    if (!refAudio) return
+    if (!audioEditorRef.current) return
 
     setIsTranscribing(true)
     try {
+      // Get the selected portion of audio, not the full file
+      const selectedAudio = await audioEditorRef.current.getSelectedAudio()
+      if (!selectedAudio) {
+        throw new Error('Could not get selected audio')
+      }
+
       const formData = new FormData()
-      formData.append('audio', refAudio, 'audio.wav')
+      formData.append('audio', selectedAudio, 'audio.wav')
 
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -59,17 +89,24 @@ export function VoiceClone() {
     } finally {
       setIsTranscribing(false)
     }
-  }, [refAudio])
+  }, [])
 
   const handleGenerate = async () => {
-    if (!text.trim() || !refAudio || !refText.trim()) return
+    if (!text.trim() || !refAudio || !refText.trim() || !audioEditorRef.current) return
+
+    // Get the selected portion of audio, not the full file
+    const selectedAudio = await audioEditorRef.current.getSelectedAudio()
+    if (!selectedAudio) {
+      console.error('Could not get selected audio')
+      return
+    }
 
     const formData = new FormData()
     formData.append('text', text)
     formData.append('language', language)
     formData.append('ref_text', refText)
     formData.append('model_size', modelSize)
-    formData.append('ref_audio', refAudio, 'reference.wav')
+    formData.append('ref_audio', selectedAudio, 'reference.wav')
 
     await generateClone(formData)
   }
@@ -105,6 +142,7 @@ export function VoiceClone() {
 
           {/* Reference Audio with Editor */}
           <AudioEditor
+            ref={audioEditorRef}
             onAudioChange={handleAudioChange}
             transcript={refText}
             onTranscriptChange={setRefText}
@@ -137,21 +175,46 @@ export function VoiceClone() {
             disabled={isLoading}
           />
 
+          {/* Model download warning */}
+          {!isModelDownloaded && !isLoading && (
+            <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400">
+              <Download className="w-5 h-5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <div className="text-sm">
+                <p className="font-medium">Model not downloaded</p>
+                <p className="text-amber-400/80">First generation will download ~3GB. This may take several minutes.</p>
+              </div>
+            </div>
+          )}
+
           {/* Generate/Cancel Buttons */}
           {isLoading ? (
-            <div className="flex gap-3">
-              <div className="flex-1 btn-primary flex items-center justify-center gap-2 cursor-wait">
-                <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                <span aria-live="polite">Generating audio...</span>
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                <div className="flex-1 btn-primary flex items-center justify-center gap-2 cursor-wait">
+                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                  <span aria-live="polite">
+                    {!isModelDownloaded
+                      ? 'Downloading model... (this may take a few minutes)'
+                      : !isModelLoaded
+                        ? 'Loading model...'
+                        : 'Generating audio...'
+                    }
+                  </span>
+                </div>
+                <button
+                  onClick={cancelGeneration}
+                  className="btn-secondary px-4 flex items-center gap-2"
+                  aria-label="Cancel generation"
+                >
+                  <X className="w-5 h-5" aria-hidden="true" />
+                  Cancel
+                </button>
               </div>
-              <button
-                onClick={cancelGeneration}
-                className="btn-secondary px-4 flex items-center gap-2"
-                aria-label="Cancel generation"
-              >
-                <X className="w-5 h-5" aria-hidden="true" />
-                Cancel
-              </button>
+              {!isModelDownloaded && (
+                <p className="text-xs text-slate-400 text-center">
+                  First-time setup downloads the AI model. Subsequent generations will be much faster.
+                </p>
+              )}
             </div>
           ) : (
             <button

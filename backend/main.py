@@ -197,4 +197,6 @@ if __name__ == "__main__":
         port=settings.port,
         workers=settings.workers,
         reload=False,
+        # Long timeout for model downloads and generation
+        timeout_keep_alive=300,  # 5 minutes
     )

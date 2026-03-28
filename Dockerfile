@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     libsndfile1 \
     ffmpeg \
+    sox \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -45,8 +46,10 @@ RUN uv sync --extra tts --frozen --no-dev
 # Install FlashAttention (optional, may fail on some systems)
 RUN uv pip install flash-attn --no-build-isolation 2>/dev/null || echo "FlashAttention not available, continuing..."
 
-# Copy backend code
+# Copy backend code, but preserve the .venv created by uv sync
+RUN mv .venv /tmp/.venv-backup
 COPY backend/ .
+RUN rm -rf .venv && mv /tmp/.venv-backup .venv
 
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static
@@ -65,6 +68,7 @@ RUN mkdir -p /models /cache /output /personalities && \
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/models
+ENV HF_HUB_CACHE=/models
 ENV TRANSFORMERS_CACHE=/models
 ENV HOST=0.0.0.0
 ENV PORT=7860

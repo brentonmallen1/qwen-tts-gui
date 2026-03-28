@@ -69,6 +69,7 @@ class ModelInfo(BaseModel):
     size: str
     mode: str
     loaded: bool
+    downloaded: bool = False
 
 
 class ModelsResponse(BaseModel):
