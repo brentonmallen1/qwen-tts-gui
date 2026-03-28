@@ -8,7 +8,7 @@ interface UseAudioEditorOptions {
 }
 
 interface UseAudioEditorReturn {
-  waveformRef: React.RefObject<HTMLDivElement>
+  waveformRef: (el: HTMLDivElement | null) => void
   isReady: boolean
   isPlaying: boolean
   duration: number
@@ -28,12 +28,13 @@ interface UseAudioEditorReturn {
 export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEditorReturn {
   const { minDuration = 3, maxDuration = 20 } = options
 
-  const waveformRef = useRef<HTMLDivElement>(null)
+  const [waveformContainer, setWaveformContainer] = useState<HTMLDivElement | null>(null)
   const wavesurferRef = useRef<WaveSurfer | null>(null)
   const regionsRef = useRef<RegionsPlugin | null>(null)
   const activeRegionRef = useRef<Region | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
+  const pendingSourceRef = useRef<File | Blob | string | null>(null)
 
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -51,15 +52,15 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       : `Selection must be at most ${maxDuration}s (currently ${selectedDuration.toFixed(1)}s)`
     : ''
 
-  // Initialize WaveSurfer
+  // Initialize WaveSurfer when container becomes available
   useEffect(() => {
-    if (!waveformRef.current) return
+    if (!waveformContainer) return
 
     const regions = RegionsPlugin.create()
     regionsRef.current = regions
 
     const ws = WaveSurfer.create({
-      container: waveformRef.current,
+      container: waveformContainer,
       waveColor: '#64748b',
       progressColor: '#3b82f6',
       cursorColor: '#f8fafc',
@@ -69,6 +70,26 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     })
 
     wavesurferRef.current = ws
+
+    // Load any pending audio source
+    if (pendingSourceRef.current) {
+      const source = pendingSourceRef.current
+      pendingSourceRef.current = null
+      if (typeof source === 'string') {
+        ws.load(source)
+      } else {
+        const url = URL.createObjectURL(source)
+        ws.load(url)
+        // Store the audio buffer for trimming
+        source.arrayBuffer().then(arrayBuffer => {
+          const ctx = new AudioContext()
+          audioContextRef.current = ctx
+          ctx.decodeAudioData(arrayBuffer).then(buffer => {
+            audioBufferRef.current = buffer
+          })
+        })
+      }
+    }
 
     ws.on('ready', () => {
       const dur = ws.getDuration()
@@ -108,11 +129,16 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       regionsRef.current = null
       activeRegionRef.current = null
     }
-  }, [maxDuration])
+  }, [waveformContainer, maxDuration])
 
   const loadAudio = useCallback(async (source: File | Blob | string) => {
-    if (!wavesurferRef.current) return
+    // If WaveSurfer isn't ready yet, store the source to load later
+    if (!wavesurferRef.current) {
+      pendingSourceRef.current = source
+      return
+    }
 
+    pendingSourceRef.current = null
     setIsReady(false)
 
     // Clear existing regions
@@ -203,7 +229,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   }, [])
 
   return {
-    waveformRef,
+    waveformRef: setWaveformContainer,
     isReady,
     isPlaying,
     duration,
