@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+frontend/dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data directories (volume mounts)
+data/
+models/
+cache/
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Misc
+*.wav
+*.mp3
+*.ogg
+
+.claude
+.history

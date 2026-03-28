@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  qwen-tts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PUID=${PUID:-1000}
+        - PGID=${PGID:-1000}
+    image: qwen-tts:latest
+    container_name: qwen-tts
+
+    # GPU Configuration
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Port mapping
+    ports:
+      - "${PORT:-7860}:7860"
+
+    # Volume mounts for persistence
+    volumes:
+      # Model cache - stores downloaded HuggingFace models
+      - ${MODEL_PATH:-./data/models}:/models
+      # Audio cache - temporary uploaded files
+      - ${CACHE_PATH:-./data/cache}:/cache
+      # Output - generated audio files
+      - ${OUTPUT_PATH:-./data/output}:/output
+
+    # Environment variables
+    environment:
+      # GPU settings
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+      # HuggingFace settings
+      - HF_HOME=/models
+      - TRANSFORMERS_CACHE=/models
+      - HF_TOKEN=${HF_TOKEN:-}
+
+      # Application settings
+      - HOST=0.0.0.0
+      - PORT=7860
+      - USE_FLASH_ATTENTION=${USE_FLASH_ATTENTION:-true}
+      - DEFAULT_MODEL_SIZE=${DEFAULT_MODEL_SIZE:-1.7B}
+      - PRELOAD_MODELS=${PRELOAD_MODELS:-false}
+
+      # Unraid compatibility
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
+      - TZ=${TZ:-America/New_York}
+
+    # Shared memory for PyTorch
+    shm_size: '4gb'
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
