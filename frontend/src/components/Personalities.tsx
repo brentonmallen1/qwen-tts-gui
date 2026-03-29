@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { Plus, Trash2, Edit2, User, Loader2, AlertCircle } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import { Plus, Trash2, Edit2, User, Loader2, AlertCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { usePersonalities, Personality } from '../hooks/usePersonalities'
 import { PersonalityForm } from './PersonalityForm'
 
@@ -18,6 +18,32 @@ export function Personalities() {
   const [showForm, setShowForm] = useState(false)
   const [editingPersonality, setEditingPersonality] = useState<Personality | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 15
+
+  // Filter and paginate personalities
+  const filteredPersonalities = useMemo(() => {
+    if (!searchQuery.trim()) return personalities
+    const query = searchQuery.toLowerCase()
+    return personalities.filter(p =>
+      p.name.toLowerCase().includes(query) ||
+      p.description?.toLowerCase().includes(query) ||
+      p.language.toLowerCase().includes(query)
+    )
+  }, [personalities, searchQuery])
+
+  const totalPages = Math.ceil(filteredPersonalities.length / itemsPerPage)
+  const paginatedPersonalities = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filteredPersonalities.slice(start, start + itemsPerPage)
+  }, [filteredPersonalities, currentPage])
+
+  // Reset to page 1 when search changes
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value)
+    setCurrentPage(1)
+  }, [])
 
   const handleCreate = useCallback(async (
     formData: FormData | { name?: string; description?: string; language?: string },
@@ -111,6 +137,20 @@ export function Personalities() {
           </button>
         </div>
 
+        {/* Search bar */}
+        {personalities.length > 0 && (
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search personalities..."
+              className="input-field pl-10"
+            />
+          </div>
+        )}
+
         {/* Error message */}
         {error && (
           <div className="flex items-center gap-2 p-4 mb-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
@@ -146,67 +186,108 @@ export function Personalities() {
           </div>
         )}
 
+        {/* No search results */}
+        {personalities.length > 0 && filteredPersonalities.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-slate-400">No personalities match your search</p>
+          </div>
+        )}
+
         {/* Personalities list */}
-        {personalities.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {personalities.map((personality) => (
-              <div
-                key={personality.id}
-                className="p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary-600/20 rounded-lg flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary-400" />
+        {paginatedPersonalities.length > 0 && (
+          <>
+            <div className="max-h-[600px] overflow-y-auto">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {paginatedPersonalities.map((personality) => (
+                  <div
+                    key={personality.id}
+                    className="p-4 bg-slate-800 border border-slate-700 rounded-lg hover:border-slate-600 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-primary-600/20 rounded-lg flex items-center justify-center">
+                          <User className="w-5 h-5 text-primary-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-white">{personality.name}</h3>
+                          <p className="text-xs text-slate-400">{personality.language}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium text-white">{personality.name}</h3>
-                      <p className="text-xs text-slate-400">{personality.language}</p>
+
+                    {personality.description && (
+                      <p className="text-sm text-slate-400 mb-3 line-clamp-2">
+                        {personality.description}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+                      <span>
+                        {personality.audio_duration
+                          ? `${personality.audio_duration.toFixed(1)}s audio`
+                          : 'No audio'}
+                      </span>
+                      <span>
+                        {new Date(personality.updated_at).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(personality)}
+                        className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(personality.id)}
+                        disabled={deletingId === personality.id}
+                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                        aria-label="Delete personality"
+                      >
+                        {deletingId === personality.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
-                </div>
+                ))}
+              </div>
+            </div>
 
-                {personality.description && (
-                  <p className="text-sm text-slate-400 mb-3 line-clamp-2">
-                    {personality.description}
-                  </p>
-                )}
-
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-                  <span>
-                    {personality.audio_duration
-                      ? `${personality.audio_duration.toFixed(1)}s audio`
-                      : 'No audio'}
-                  </span>
-                  <span>
-                    {new Date(personality.updated_at).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <div className="flex gap-2">
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
+                <p className="text-sm text-slate-400">
+                  Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredPersonalities.length)} of {filteredPersonalities.length}
+                </p>
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleEdit(personality)}
-                    className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Previous page"
                   >
-                    <Edit2 className="w-4 h-4" />
-                    Edit
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
+                  <span className="text-sm text-slate-300 min-w-[80px] text-center">
+                    Page {currentPage} of {totalPages}
+                  </span>
                   <button
-                    onClick={() => handleDelete(personality.id)}
-                    disabled={deletingId === personality.id}
-                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                    aria-label="Delete personality"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Next page"
                   >
-                    {deletingId === personality.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
+                    <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
