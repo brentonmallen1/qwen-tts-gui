@@ -16,7 +16,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Stage 2: Python runtime with CUDA (Ubuntu 24.04 has Python 3.12 built-in)
-FROM nvidia/cuda:12.9.0-runtime-ubuntu24.04 AS runtime
+FROM nvidia/cuda:12.4.1-runtime-ubuntu24.04 AS runtime
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -50,6 +50,7 @@ RUN uv pip install flash-attn --no-build-isolation 2>/dev/null || echo "FlashAtt
 COPY backend/*.py ./
 COPY backend/api ./api
 COPY backend/services ./services
+COPY backend/scripts ./scripts
 
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static

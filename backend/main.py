@@ -101,9 +101,10 @@ async def lifespan(app: FastAPI):
         logger.info("Preloading models...")
         for size in settings.enabled_sizes:
             try:
-                logger.info(f"Loading model: {size}")
-                tts_service._load_model(size)
-                logger.info(f"Model {size} loaded successfully")
+                # Preload the clone model (most common use case)
+                logger.info(f"Loading clone model: {size}")
+                tts_service._load_model("clone", size)
+                logger.info(f"Clone model {size} loaded successfully")
             except Exception as e:
                 logger.error(f"Failed to preload model {size}: {e}")
 

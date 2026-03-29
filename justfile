@@ -133,12 +133,7 @@ download-models-base:
 
 # Download models inside Docker container
 download-models-docker:
-    docker exec -it qwen-tts python -c "from huggingface_hub import snapshot_download; \
-        models = ['Qwen/Qwen3-TTS-12Hz-1.7B-Base', 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', \
-                  'Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign', 'Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice', \
-                  'Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice', 'Systran/faster-whisper-base']; \
-        [print(f'Downloading {m}...') or snapshot_download(m) for m in models]; \
-        print('Done!')"
+    docker exec -it qwen-tts uv run python scripts/download_models.py
 
 # ─────────────────────────────────────────────────────────
 # Utilities
