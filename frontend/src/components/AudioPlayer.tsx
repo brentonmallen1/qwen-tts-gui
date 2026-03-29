@@ -1,4 +1,3 @@
-import { useRef, useEffect } from 'react'
 import { Download, Volume2 } from 'lucide-react'
 
 interface AudioPlayerProps {
@@ -8,16 +7,6 @@ interface AudioPlayerProps {
 }
 
 export function AudioPlayer({ audioUrl, filename, duration }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null)
-
-  useEffect(() => {
-    // Auto-play when new audio is loaded
-    if (audioRef.current) {
-      audioRef.current.play().catch(() => {
-        // Autoplay might be blocked by browser
-      })
-    }
-  }, [audioUrl])
 
   const handleDownload = () => {
     const link = document.createElement('a')
@@ -51,7 +40,6 @@ export function AudioPlayer({ audioUrl, filename, duration }: AudioPlayerProps) 
       </div>
 
       <audio
-        ref={audioRef}
         src={audioUrl}
         controls
         aria-label="Generated speech audio"
