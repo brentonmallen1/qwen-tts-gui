@@ -62,9 +62,10 @@ RUN groupadd -g ${PGID} appgroup 2>/dev/null; \
     useradd -u ${PUID} -g ${PGID} -m -s /bin/bash appuser 2>/dev/null; \
     exit 0
 
-# Create directories for volumes and set ownership (use numeric IDs for robustness)
+# Create directories for volumes and set ownership
+# Only chown volume mount points - /app/.venv stays root-owned (read-only is fine)
 RUN mkdir -p /models /cache /output /personalities && \
-    chown -R ${PUID}:${PGID} /app /models /cache /output /personalities
+    chown -R ${PUID}:${PGID} /models /cache /output /personalities
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
