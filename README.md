@@ -95,12 +95,15 @@ The first run will download the models (~2-5GB each) which may take several minu
 
 ### Unraid Deployment
 
-This container is designed for easy Unraid deployment:
+This container is designed for easy Unraid deployment using the included template:
 
-1. Add a new container from the Docker tab
-2. Set the repository to the built image or build from source
-3. Configure paths to use your array (e.g., `/mnt/user/appdata/qwen-tts/`)
-4. Set PUID/PGID to match your Unraid user
+1. Download [`qwen-tts.xml`](qwen-tts.xml) from this repository
+2. In Unraid, go to Docker tab > Add Container > Template dropdown > select "Add New Template"
+3. Choose the downloaded XML file
+4. Configure your paths and GPU settings
+5. Click Apply
+
+The template includes all configuration options with descriptions, GPU passthrough, and Unraid-optimized defaults (PUID=99, PGID=100).
 
 ## Models
 

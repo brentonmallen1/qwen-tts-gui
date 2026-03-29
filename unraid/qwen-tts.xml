@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <!-- Container Metadata -->
+  <Name>qwen-tts</Name>
+  <Repository>registry.mallen.us/qwen-tts:latest</Repository>
+  <Registry>registry.mallen.us</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Latest stable release</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Shell>bash</Shell>
+
+  <!-- Application Info -->
+  <Support>https://github.com/mallen7/qwen-tts/issues</Support>
+  <Project>https://github.com/mallen7/qwen-tts</Project>
+  <Overview>Self-hosted text-to-speech with voice cloning using Qwen3-TTS. Features voice cloning from reference audio, voice design from text descriptions, and custom preset voices. Supports 10 languages with GPU acceleration.</Overview>
+  <Category>MediaApp:Speech Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:7860]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/mallen7/qwen-tts/main/qwen-tts.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/mallen7/qwen-tts/main/icon.png</Icon>
+  <ExtraParams>--runtime=nvidia --shm-size=4g</ExtraParams>
+  <Requires>NVIDIA GPU with CUDA support and NVIDIA Container Toolkit installed</Requires>
+  <Date>2026-03-29</Date>
+  <Beta>False</Beta>
+  <PostArgs/>
+  <DonateText/>
+  <DonateLink/>
+  <DonateImg/>
+
+  <!-- ===== ALWAYS VISIBLE CONFIG ===== -->
+
+  <!-- Port -->
+  <Config Name="Web UI Port" Target="7860" Default="7860" Mode="tcp"
+          Description="Web interface and API port" Type="Port" Display="always"
+          Required="true" Mask="false">7860</Config>
+
+  <!-- Volume Paths -->
+  <Config Name="Models Path" Target="/models" Default="/mnt/user/appdata/qwen-tts/models"
+          Mode="rw" Description="HuggingFace model cache (2-5GB per model). Consider placing on cache drive for performance."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/qwen-tts/models</Config>
+
+  <Config Name="Cache Path" Target="/cache" Default="/mnt/user/appdata/qwen-tts/cache"
+          Mode="rw" Description="Temporary files for uploads and processing"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/qwen-tts/cache</Config>
+
+  <Config Name="Output Path" Target="/output" Default="/mnt/user/appdata/qwen-tts/output"
+          Mode="rw" Description="Generated audio files"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/qwen-tts/output</Config>
+
+  <Config Name="Personalities Path" Target="/personalities" Default="/mnt/user/appdata/qwen-tts/personalities"
+          Mode="rw" Description="Saved voice personalities for reuse"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/qwen-tts/personalities</Config>
+
+  <!-- GPU Configuration -->
+  <Config Name="NVIDIA GPU" Target="NVIDIA_VISIBLE_DEVICES" Default="all"
+          Mode="" Description="GPU UUID from nvidia-smi -L or 'all' for all GPUs. Find your GPU UUID in Tools > System Devices."
+          Type="Variable" Display="always" Required="true" Mask="false">all</Config>
+
+  <Config Name="CUDA Device" Target="CUDA_VISIBLE_DEVICES" Default="0"
+          Mode="" Description="CUDA device index (0 for first GPU, 0,1 for multiple)"
+          Type="Variable" Display="always" Required="false" Mask="false">0</Config>
+
+  <!-- Model Configuration -->
+  <Config Name="Enabled Model Sizes" Target="ENABLED_MODEL_SIZES" Default="0.6B,1.7B"
+          Mode="" Description="Model sizes to enable. 0.6B=faster, 1.7B=better quality. Voice Design requires 1.7B."
+          Type="Variable" Display="always" Required="true" Mask="false">0.6B,1.7B</Config>
+
+  <Config Name="Use Flash Attention" Target="USE_FLASH_ATTENTION" Default="false"
+          Mode="" Description="Memory optimization for modern GPUs. May cause issues on some hardware."
+          Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+
+  <Config Name="Preload Models" Target="PRELOAD_MODELS" Default="false"
+          Mode="" Description="Load models at startup. Slower start but faster first inference."
+          Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+
+  <!-- Whisper -->
+  <Config Name="Whisper Model" Target="WHISPER_MODEL" Default="base"
+          Mode="" Description="Transcription model size: tiny (~75MB), base (~150MB, recommended), small (~500MB), medium (~1.5GB), large-v3 (~3GB)"
+          Type="Variable" Display="always" Required="false" Mask="false">base</Config>
+
+  <!-- User/Group IDs -->
+  <Config Name="PUID" Target="PUID" Default="99"
+          Mode="" Description="User ID for file permissions (99=nobody on Unraid)"
+          Type="Variable" Display="always" Required="true" Mask="false">99</Config>
+
+  <Config Name="PGID" Target="PGID" Default="100"
+          Mode="" Description="Group ID for file permissions (100=users on Unraid)"
+          Type="Variable" Display="always" Required="true" Mask="false">100</Config>
+
+  <Config Name="Timezone" Target="TZ" Default="America/New_York"
+          Mode="" Description="Container timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)"
+          Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+
+  <!-- ===== ADVANCED CONFIG ===== -->
+
+  <!-- Authentication -->
+  <Config Name="Enable Authentication" Target="AUTH_ENABLED" Default="false"
+          Mode="" Description="Enable basic HTTP authentication for the web interface"
+          Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+
+  <Config Name="Auth Username" Target="AUTH_USERNAME" Default="admin"
+          Mode="" Description="Username for authentication (if enabled)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">admin</Config>
+
+  <Config Name="Auth Password" Target="AUTH_PASSWORD" Default=""
+          Mode="" Description="Password for authentication (required if AUTH_ENABLED=true)"
+          Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <!-- HuggingFace -->
+  <Config Name="HuggingFace Token" Target="HF_TOKEN" Default=""
+          Mode="" Description="Optional token for accessing private/gated models on HuggingFace"
+          Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+
+  <!-- Security -->
+  <Config Name="Max Upload Size" Target="MAX_UPLOAD_SIZE" Default="52428800"
+          Mode="" Description="Maximum file upload size in bytes (default: 50MB = 52428800)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">52428800</Config>
+
+  <Config Name="Allowed Audio Types" Target="ALLOWED_AUDIO_TYPES" Default="audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav"
+          Mode="" Description="Comma-separated list of allowed audio MIME types for upload"
+          Type="Variable" Display="advanced" Required="false" Mask="false">audio/wav,audio/mpeg,audio/mp3,audio/x-wav,audio/wave,audio/x-pn-wav</Config>
+
+  <Config Name="Allowed CORS Origins" Target="ALLOWED_ORIGINS" Default=""
+          Mode="" Description="Comma-separated list of allowed CORS origins. Leave empty for localhost-only."
+          Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <!-- Logging -->
+  <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO"
+          Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, ERROR"
+          Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+
+  <!-- Model Defaults -->
+  <Config Name="Default Model Size" Target="DEFAULT_MODEL_SIZE" Default="1.7B"
+          Mode="" Description="Default model size when not specified. Should match one of the enabled sizes."
+          Type="Variable" Display="advanced" Required="false" Mask="false">1.7B</Config>
+
+  <!-- Internal paths (hidden, hardcoded) -->
+  <Config Name="HF_HOME" Target="HF_HOME" Default="/models"
+          Mode="" Description="HuggingFace home directory (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">/models</Config>
+
+  <Config Name="HF_HUB_CACHE" Target="HF_HUB_CACHE" Default="/models"
+          Mode="" Description="HuggingFace hub cache (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">/models</Config>
+
+  <Config Name="TRANSFORMERS_CACHE" Target="TRANSFORMERS_CACHE" Default="/models"
+          Mode="" Description="Transformers cache directory (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">/models</Config>
+
+  <Config Name="PERSONALITIES_PATH" Target="PERSONALITIES_PATH" Default="/personalities"
+          Mode="" Description="Personalities storage path (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">/personalities</Config>
+
+  <Config Name="HOST" Target="HOST" Default="0.0.0.0"
+          Mode="" Description="Bind address (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">0.0.0.0</Config>
+
+  <Config Name="PORT" Target="PORT" Default="7860"
+          Mode="" Description="Internal container port (internal)"
+          Type="Variable" Display="advanced" Required="false" Mask="false">7860</Config>
+
+</Container>

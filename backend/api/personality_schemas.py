@@ -1,8 +1,21 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 from .schemas import Language, ModelSize
+
+
+class Segment(BaseModel):
+    """A segment of audio defined by start and end times in seconds."""
+    start: float = Field(..., ge=0)
+    end: float = Field(..., gt=0)
+
+    @field_validator('end')
+    @classmethod
+    def end_after_start(cls, v: float, info) -> float:
+        if 'start' in info.data and v <= info.data['start']:
+            raise ValueError('end must be greater than start')
+        return v
 
 
 class PersonalityBase(BaseModel):
@@ -23,6 +36,7 @@ class PersonalityUpdate(BaseModel):
 
 class PersonalityAudioUpdate(BaseModel):
     transcript: str = Field(..., min_length=1, max_length=2000)
+    segments: Optional[list[Segment]] = Field(None, max_length=5)
 
 
 class PersonalityResponse(BaseModel):
@@ -31,8 +45,10 @@ class PersonalityResponse(BaseModel):
     description: Optional[str] = None
     language: Language
     transcript: str
-    audio_url: str
-    audio_duration: Optional[float] = None
+    audio_url: str  # URL to reference.wav (concatenated segments for TTS)
+    original_url: Optional[str] = None  # URL to original.wav (full upload for editing)
+    segments: list[Segment] = []  # Segment definitions from original
+    audio_duration: Optional[float] = None  # Duration of reference.wav
     created_at: datetime
     updated_at: datetime
 

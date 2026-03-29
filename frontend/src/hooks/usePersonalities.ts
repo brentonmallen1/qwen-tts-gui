@@ -1,12 +1,19 @@
 import { useState, useCallback, useEffect } from 'react'
 
+export interface Segment {
+  start: number
+  end: number
+}
+
 export interface Personality {
   id: string
   name: string
   description: string | null
   language: string
   transcript: string
-  audio_url: string
+  audio_url: string  // URL to reference.wav (concatenated segments for TTS)
+  original_url: string | null  // URL to original.wav (full upload for editing)
+  segments: Segment[]  // Segment definitions from original
   audio_duration: number | null
   created_at: string
   updated_at: string

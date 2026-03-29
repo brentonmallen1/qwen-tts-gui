@@ -4,9 +4,16 @@ import RegionsPlugin, { Region } from 'wavesurfer.js/dist/plugins/regions.js'
 
 export type PlayMode = 'selection' | 'loop' | 'continue'
 
+export interface Segment {
+  start: number
+  end: number
+}
+
 interface UseAudioEditorOptions {
   minDuration?: number
   maxDuration?: number
+  maxSegments?: number
+  initialSegments?: Segment[]
 }
 
 interface UseAudioEditorReturn {
@@ -14,16 +21,24 @@ interface UseAudioEditorReturn {
   isReady: boolean
   isPlaying: boolean
   duration: number
-  regionStart: number
-  regionEnd: number
-  selectedDuration: number
+  // Multi-segment support
+  segments: Segment[]
+  selectedSegmentIndex: number | null
+  totalSelectedDuration: number
   isValidDuration: boolean
   validationMessage: string
-  loadAudio: (file: File | Blob | string) => Promise<void>
+  canAddSegment: boolean
+  hasOverlap: boolean
+  // Actions
+  loadAudio: (file: File | Blob | string, initialSegments?: Segment[]) => Promise<void>
+  addSegment: () => void
+  removeSegment: (index: number) => void
+  selectSegment: (index: number | null) => void
+  getSegments: () => Segment[]
+  getFullAudio: () => Promise<Blob | null>
+  getSelectedAudio: () => Promise<Blob | null>
   playSelection: () => void
   stopPlayback: () => void
-  setRegion: (start: number, end: number) => void
-  getTrimmedAudio: () => Promise<Blob | null>
   destroy: () => void
   // Zoom controls
   zoom: number
@@ -34,24 +49,33 @@ interface UseAudioEditorReturn {
   setPlayMode: (mode: PlayMode) => void
 }
 
+// Generate unique colors for segments
+const SEGMENT_COLORS = [
+  'rgba(59, 130, 246, 0.3)',   // blue
+  'rgba(34, 197, 94, 0.3)',    // green
+  'rgba(168, 85, 247, 0.3)',   // purple
+  'rgba(249, 115, 22, 0.3)',   // orange
+  'rgba(236, 72, 153, 0.3)',   // pink
+]
+
 export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEditorReturn {
-  const { minDuration = 3, maxDuration = 20 } = options
+  const { minDuration = 3, maxDuration = 20, maxSegments = 5 } = options
 
   const [waveformContainer, setWaveformContainer] = useState<HTMLDivElement | null>(null)
   const wavesurferRef = useRef<WaveSurfer | null>(null)
   const regionsRef = useRef<RegionsPlugin | null>(null)
-  const activeRegionRef = useRef<Region | null>(null)
+  const regionsMapRef = useRef<Map<string, Region>>(new Map())
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
-  const pendingSourceRef = useRef<File | Blob | string | null>(null)
+  const pendingSourceRef = useRef<{ source: File | Blob | string; segments?: Segment[] } | null>(null)
   const playModeRef = useRef<PlayMode>('selection')
 
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
-  const [regionStart, setRegionStart] = useState(0)
-  const [regionEnd, setRegionEnd] = useState(0)
-  const [zoom, setZoom] = useState(1) // pixels per second, 1 = default
+  const [segments, setSegments] = useState<Segment[]>([])
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null)
+  const [zoom, setZoom] = useState(1)
   const [playMode, setPlayModeState] = useState<PlayMode>('selection')
 
   // Keep ref in sync with state for event handlers
@@ -60,15 +84,57 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setPlayModeState(mode)
   }, [])
 
-  const selectedDuration = regionEnd - regionStart
+  // Calculate total duration of all segments
+  const totalSelectedDuration = segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0)
 
-  const isValidDuration = selectedDuration >= minDuration && selectedDuration <= maxDuration
+  // Check for overlapping segments
+  const hasOverlap = useCallback(() => {
+    const sorted = [...segments].sort((a, b) => a.start - b.start)
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (sorted[i].end > sorted[i + 1].start) {
+        return true
+      }
+    }
+    return false
+  }, [segments])
 
-  const validationMessage = !isValidDuration
-    ? selectedDuration < minDuration
-      ? `Selection must be at least ${minDuration}s (currently ${selectedDuration.toFixed(1)}s)`
-      : `Selection must be at most ${maxDuration}s (currently ${selectedDuration.toFixed(1)}s)`
-    : ''
+  const isValidDuration = totalSelectedDuration >= minDuration && totalSelectedDuration <= maxDuration && !hasOverlap()
+  const canAddSegment = segments.length < maxSegments
+
+  const validationMessage = hasOverlap()
+    ? 'Segments cannot overlap'
+    : totalSelectedDuration < minDuration
+      ? `Total duration must be at least ${minDuration}s (currently ${totalSelectedDuration.toFixed(1)}s)`
+      : totalSelectedDuration > maxDuration
+        ? `Total duration must be at most ${maxDuration}s (currently ${totalSelectedDuration.toFixed(1)}s)`
+        : ''
+
+  // Sync regions to state
+  const syncRegionsToState = useCallback(() => {
+    const newSegments: Segment[] = []
+    regionsMapRef.current.forEach((region) => {
+      newSegments.push({ start: region.start, end: region.end })
+    })
+    // Sort by start time
+    newSegments.sort((a, b) => a.start - b.start)
+    setSegments(newSegments)
+  }, [])
+
+  // Create a region in the waveform
+  const createRegion = useCallback((start: number, end: number, index: number): Region | null => {
+    if (!regionsRef.current) return null
+
+    const region = regionsRef.current.addRegion({
+      start,
+      end,
+      color: SEGMENT_COLORS[index % SEGMENT_COLORS.length],
+      drag: true,
+      resize: true,
+    })
+
+    regionsMapRef.current.set(region.id, region)
+    return region
+  }, [])
 
   // Initialize WaveSurfer when container becomes available
   useEffect(() => {
@@ -91,14 +157,13 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
 
     // Load any pending audio source
     if (pendingSourceRef.current) {
-      const source = pendingSourceRef.current
+      const { source, segments: initSegs } = pendingSourceRef.current
       pendingSourceRef.current = null
       if (typeof source === 'string') {
         ws.load(source)
       } else {
         const url = URL.createObjectURL(source)
         ws.load(url)
-        // Store the audio buffer for trimming
         source.arrayBuffer().then(arrayBuffer => {
           const ctx = new AudioContext()
           audioContextRef.current = ctx
@@ -107,27 +172,32 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
           })
         })
       }
+      // Store initial segments to create after ready
+      if (initSegs) {
+        pendingSourceRef.current = { source: '', segments: initSegs }
+      }
     }
 
     ws.on('ready', () => {
       const dur = ws.getDuration()
       setDuration(dur)
 
-      // Create initial region spanning valid duration
-      const end = Math.min(dur, maxDuration)
-      const start = 0
+      // Check for pending initial segments
+      const initSegs = pendingSourceRef.current?.segments
+      pendingSourceRef.current = null
 
-      const region = regions.addRegion({
-        start,
-        end,
-        color: 'rgba(59, 130, 246, 0.3)',
-        drag: true,
-        resize: true,
-      })
+      if (initSegs && initSegs.length > 0) {
+        // Create regions from initial segments
+        initSegs.forEach((seg, i) => {
+          createRegion(seg.start, Math.min(seg.end, dur), i)
+        })
+      } else {
+        // Create single default region
+        const end = Math.min(dur, maxDuration)
+        createRegion(0, end, 0)
+      }
 
-      activeRegionRef.current = region
-      setRegionStart(start)
-      setRegionEnd(end)
+      syncRegionsToState()
       setIsReady(true)
     })
 
@@ -136,14 +206,23 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     ws.on('finish', () => setIsPlaying(false))
 
     // Handle region updates
-    regions.on('region-updated', (region: Region) => {
-      setRegionStart(region.start)
-      setRegionEnd(region.end)
+    regions.on('region-updated', () => {
+      syncRegionsToState()
     })
 
-    // Handle loop mode - replay when region ends
+    // Handle region click for selection
+    regions.on('region-clicked', (region: Region, e: MouseEvent) => {
+      e.stopPropagation()
+      // Find index of this region
+      const sortedRegions = Array.from(regionsMapRef.current.values())
+        .sort((a, b) => a.start - b.start)
+      const index = sortedRegions.findIndex(r => r.id === region.id)
+      setSelectedSegmentIndex(index)
+    })
+
+    // Handle loop mode
     regions.on('region-out', (region: Region) => {
-      if (playModeRef.current === 'loop' && region === activeRegionRef.current) {
+      if (playModeRef.current === 'loop') {
         region.play()
       }
     })
@@ -152,23 +231,31 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       ws.destroy()
       wavesurferRef.current = null
       regionsRef.current = null
-      activeRegionRef.current = null
+      regionsMapRef.current.clear()
     }
-  }, [waveformContainer, maxDuration])
+  }, [waveformContainer, maxDuration, createRegion, syncRegionsToState])
 
-  const loadAudio = useCallback(async (source: File | Blob | string) => {
+  const loadAudio = useCallback(async (source: File | Blob | string, initSegments?: Segment[]) => {
     // If WaveSurfer isn't ready yet, store the source to load later
     if (!wavesurferRef.current) {
-      pendingSourceRef.current = source
+      pendingSourceRef.current = { source, segments: initSegments }
       return
     }
 
     pendingSourceRef.current = null
     setIsReady(false)
+    setSegments([])
+    setSelectedSegmentIndex(null)
+    regionsMapRef.current.clear()
 
     // Clear existing regions
     if (regionsRef.current) {
       regionsRef.current.clearRegions()
+    }
+
+    // Store initial segments for after load
+    if (initSegments) {
+      pendingSourceRef.current = { source: '', segments: initSegments }
     }
 
     if (typeof source === 'string') {
@@ -184,25 +271,153 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     }
   }, [])
 
+  const addSegment = useCallback(() => {
+    if (!regionsRef.current || !isReady || segments.length >= maxSegments) return
+
+    // Find a gap to place the new segment, or place at end
+    const sorted = [...segments].sort((a, b) => a.start - b.start)
+    let newStart = 0
+    let newEnd = Math.min(2, duration) // 2 second default length
+
+    // Try to find a gap
+    for (let i = 0; i < sorted.length; i++) {
+      const gapStart = i === 0 ? 0 : sorted[i - 1].end
+      const gapEnd = sorted[i].start
+
+      if (gapEnd - gapStart >= 1) {
+        newStart = gapStart
+        newEnd = Math.min(gapStart + 2, gapEnd)
+        break
+      }
+    }
+
+    // If no gap found, try after the last segment
+    if (newStart === 0 && sorted.length > 0) {
+      const lastEnd = sorted[sorted.length - 1].end
+      if (duration - lastEnd >= 1) {
+        newStart = lastEnd
+        newEnd = Math.min(lastEnd + 2, duration)
+      } else {
+        // No space available
+        return
+      }
+    }
+
+    createRegion(newStart, newEnd, segments.length)
+    syncRegionsToState()
+  }, [segments, duration, maxSegments, isReady, createRegion, syncRegionsToState])
+
+  const removeSegment = useCallback((index: number) => {
+    if (segments.length <= 1) return // Keep at least one segment
+
+    const sorted = [...segments].sort((a, b) => a.start - b.start)
+    const segToRemove = sorted[index]
+
+    // Find and remove the matching region
+    regionsMapRef.current.forEach((region, id) => {
+      if (Math.abs(region.start - segToRemove.start) < 0.01 &&
+          Math.abs(region.end - segToRemove.end) < 0.01) {
+        region.remove()
+        regionsMapRef.current.delete(id)
+      }
+    })
+
+    syncRegionsToState()
+    setSelectedSegmentIndex(null)
+  }, [segments, syncRegionsToState])
+
+  const selectSegment = useCallback((index: number | null) => {
+    setSelectedSegmentIndex(index)
+  }, [])
+
+  const getSegments = useCallback((): Segment[] => {
+    return [...segments].sort((a, b) => a.start - b.start)
+  }, [segments])
+
+  const getFullAudio = useCallback(async (): Promise<Blob | null> => {
+    if (!audioBufferRef.current || !audioContextRef.current) {
+      return null
+    }
+    // Return the full audio buffer as WAV
+    const wavBlob = audioBufferToWav(audioBufferRef.current)
+    return wavBlob
+  }, [])
+
+  const getSelectedAudio = useCallback(async (): Promise<Blob | null> => {
+    if (!audioBufferRef.current || segments.length === 0) {
+      return null
+    }
+
+    const buffer = audioBufferRef.current
+    const sampleRate = buffer.sampleRate
+    const numberOfChannels = buffer.numberOfChannels
+
+    // Sort segments by start time
+    const sortedSegments = [...segments].sort((a, b) => a.start - b.start)
+
+    // Calculate total frames needed
+    let totalFrames = 0
+    for (const seg of sortedSegments) {
+      const startFrame = Math.floor(seg.start * sampleRate)
+      const endFrame = Math.floor(seg.end * sampleRate)
+      totalFrames += endFrame - startFrame
+    }
+
+    // Create a new AudioContext for the offline rendering
+    const offlineCtx = new OfflineAudioContext(numberOfChannels, totalFrames, sampleRate)
+    const newBuffer = offlineCtx.createBuffer(numberOfChannels, totalFrames, sampleRate)
+
+    // Copy segment data into new buffer
+    let destOffset = 0
+    for (const seg of sortedSegments) {
+      const startFrame = Math.floor(seg.start * sampleRate)
+      const endFrame = Math.floor(seg.end * sampleRate)
+      const frameCount = endFrame - startFrame
+
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const sourceData = buffer.getChannelData(channel)
+        const destData = newBuffer.getChannelData(channel)
+        for (let i = 0; i < frameCount; i++) {
+          destData[destOffset + i] = sourceData[startFrame + i]
+        }
+      }
+      destOffset += frameCount
+    }
+
+    // Convert to WAV
+    return audioBufferToWav(newBuffer)
+  }, [segments])
+
   const playSelection = useCallback(() => {
-    if (!wavesurferRef.current || !activeRegionRef.current) return
+    if (!wavesurferRef.current || segments.length === 0) return
 
     const ws = wavesurferRef.current
-    const region = activeRegionRef.current
-    const mode = playModeRef.current
+    const sorted = [...segments].sort((a, b) => a.start - b.start)
 
-    if (mode === 'loop') {
-      // Play region and loop - region-out handler will restart
-      region.play()
-    } else if (mode === 'continue') {
-      // Play from region start and continue past region end
-      ws.setTime(region.start)
-      ws.play()
-    } else {
-      // Default: play selection only, stop at end
-      region.play()
+    // Play the selected segment, or first segment
+    const segIndex = selectedSegmentIndex ?? 0
+    const seg = sorted[segIndex]
+
+    // Find the matching region
+    let targetRegion: Region | undefined
+    for (const region of regionsMapRef.current.values()) {
+      if (Math.abs(region.start - seg.start) < 0.01 &&
+          Math.abs(region.end - seg.end) < 0.01) {
+        targetRegion = region
+        break
+      }
     }
-  }, [])
+
+    if (targetRegion) {
+      const mode = playModeRef.current
+      if (mode === 'continue') {
+        ws.setTime(targetRegion.start)
+        ws.play()
+      } else {
+        targetRegion.play()
+      }
+    }
+  }, [segments, selectedSegmentIndex])
 
   const stopPlayback = useCallback(() => {
     if (!wavesurferRef.current) return
@@ -223,49 +438,6 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     wavesurferRef.current.zoom(newZoom)
   }, [zoom])
 
-  const setRegion = useCallback((start: number, end: number) => {
-    if (!activeRegionRef.current) return
-    activeRegionRef.current.setOptions({ start, end })
-    setRegionStart(start)
-    setRegionEnd(end)
-  }, [])
-
-  const getTrimmedAudio = useCallback(async (): Promise<Blob | null> => {
-    if (!audioBufferRef.current || !audioContextRef.current) {
-      // If we don't have the buffer, try to get it from wavesurfer
-      if (!wavesurferRef.current) return null
-
-      // Fallback: return null if we can't trim client-side
-      return null
-    }
-
-    const sampleRate = audioBufferRef.current.sampleRate
-    const numberOfChannels = audioBufferRef.current.numberOfChannels
-    const startSample = Math.floor(regionStart * sampleRate)
-    const endSample = Math.floor(regionEnd * sampleRate)
-    const trimmedLength = endSample - startSample
-
-    // Create a new buffer for the trimmed audio
-    const trimmedBuffer = audioContextRef.current.createBuffer(
-      numberOfChannels,
-      trimmedLength,
-      sampleRate
-    )
-
-    // Copy the trimmed portion
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      const sourceData = audioBufferRef.current.getChannelData(channel)
-      const targetData = trimmedBuffer.getChannelData(channel)
-      for (let i = 0; i < trimmedLength; i++) {
-        targetData[i] = sourceData[startSample + i]
-      }
-    }
-
-    // Convert to WAV blob
-    const wavBlob = audioBufferToWav(trimmedBuffer)
-    return wavBlob
-  }, [regionStart, regionEnd])
-
   const destroy = useCallback(() => {
     if (wavesurferRef.current) {
       wavesurferRef.current.destroy()
@@ -276,10 +448,11 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       audioContextRef.current = null
     }
     audioBufferRef.current = null
+    regionsMapRef.current.clear()
     setIsReady(false)
     setDuration(0)
-    setRegionStart(0)
-    setRegionEnd(0)
+    setSegments([])
+    setSelectedSegmentIndex(null)
   }, [])
 
   return {
@@ -287,22 +460,26 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     isReady,
     isPlaying,
     duration,
-    regionStart,
-    regionEnd,
-    selectedDuration,
+    segments,
+    selectedSegmentIndex,
+    totalSelectedDuration,
     isValidDuration,
     validationMessage,
+    canAddSegment,
+    hasOverlap: hasOverlap(),
     loadAudio,
+    addSegment,
+    removeSegment,
+    selectSegment,
+    getSegments,
+    getFullAudio,
+    getSelectedAudio,
     playSelection,
     stopPlayback,
-    setRegion,
-    getTrimmedAudio,
     destroy,
-    // Zoom controls
     zoom,
     zoomIn,
     zoomOut,
-    // Play mode
     playMode,
     setPlayMode,
   }

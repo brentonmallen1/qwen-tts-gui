@@ -1,24 +1,19 @@
 import { useCallback, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
-import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward } from 'lucide-react'
-import { PlayMode } from '../hooks/useAudioEditor'
-import { useAudioEditor } from '../hooks/useAudioEditor'
-
-export interface AudioSelection {
-  start: number
-  end: number
-}
+import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward, Plus, Trash2 } from 'lucide-react'
+import { PlayMode, Segment, useAudioEditor } from '../hooks/useAudioEditor'
 
 export interface AudioEditorHandle {
+  getFullAudio: () => Promise<Blob | null>
   getSelectedAudio: () => Promise<Blob | null>
-  getSelection: () => AudioSelection
+  getSegments: () => Segment[]
 }
 
 interface AudioEditorProps {
   audioFile?: File | null
   audioUrl?: string
   onAudioChange: (blob: Blob | null) => void
-  onSelectionChange?: (selection: AudioSelection) => void
-  initialSelection?: AudioSelection
+  onSegmentsChange?: (segments: Segment[]) => void
+  initialSegments?: Segment[]
   transcript: string
   onTranscriptChange: (text: string) => void
   onTranscribe?: () => Promise<void>
@@ -32,7 +27,8 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
   audioFile,
   audioUrl,
   onAudioChange,
-  onSelectionChange,
+  onSegmentsChange,
+  initialSegments,
   transcript,
   onTranscriptChange,
   onTranscribe,
@@ -49,15 +45,21 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     isReady,
     isPlaying,
     duration,
-    regionStart,
-    regionEnd,
-    selectedDuration,
+    segments,
+    selectedSegmentIndex,
+    totalSelectedDuration,
     isValidDuration,
     validationMessage,
+    canAddSegment,
     loadAudio,
+    addSegment,
+    removeSegment,
+    selectSegment,
+    getSegments,
+    getFullAudio,
+    getSelectedAudio,
     playSelection,
     stopPlayback,
-    getTrimmedAudio,
     zoom,
     zoomIn,
     zoomOut,
@@ -65,26 +67,44 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     setPlayMode,
   } = useAudioEditor({ minDuration, maxDuration })
 
-  // Expose methods via ref for parent to get selected audio
+  // Expose methods via ref for parent to get audio and segments
   useImperativeHandle(ref, () => ({
-    getSelectedAudio: getTrimmedAudio,
-    getSelection: () => ({ start: regionStart, end: regionEnd }),
-  }), [getTrimmedAudio, regionStart, regionEnd])
+    getFullAudio,
+    getSelectedAudio,
+    getSegments,
+  }), [getFullAudio, getSelectedAudio, getSegments])
 
   // Load audio when file changes
   useEffect(() => {
     const source = audioFile || localFile || audioUrl
     if (source) {
-      loadAudio(source)
+      loadAudio(source, initialSegments)
     }
-  }, [audioFile, localFile, audioUrl, loadAudio])
+  }, [audioFile, localFile, audioUrl, loadAudio, initialSegments])
 
-  // Notify parent when selection changes
+  // Notify parent when segments change
   useEffect(() => {
-    if (isReady && onSelectionChange) {
-      onSelectionChange({ start: regionStart, end: regionEnd })
+    if (isReady && onSegmentsChange && segments.length > 0) {
+      onSegmentsChange(segments)
     }
-  }, [regionStart, regionEnd, isReady, onSelectionChange])
+  }, [segments, isReady, onSegmentsChange])
+
+  // Handle keyboard delete
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') &&
+          selectedSegmentIndex !== null &&
+          segments.length > 1 &&
+          // Don't delete if focus is on an input
+          !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        removeSegment(selectedSegmentIndex)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedSegmentIndex, segments.length, removeSegment])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -113,6 +133,9 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
 
   const hasAudio = audioFile || localFile || audioUrl
   const inputId = `audio-editor-${label.replace(/\s+/g, '-').toLowerCase()}`
+
+  // Sort segments for display
+  const sortedSegments = [...segments].sort((a, b) => a.start - b.start)
 
   return (
     <div className="space-y-4">
@@ -149,14 +172,44 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
 
             {isReady && (
               <>
-                {/* Selection info */}
+                {/* Segments info */}
                 <div className="flex items-center justify-between text-sm mb-3">
-                  <span className="text-slate-400">
-                    Selection: {regionStart.toFixed(1)}s - {regionEnd.toFixed(1)}s
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">
+                      {segments.length} segment{segments.length !== 1 ? 's' : ''}
+                    </span>
+                    {selectedSegmentIndex !== null && (
+                      <span className="text-primary-400">
+                        (#{selectedSegmentIndex + 1} selected)
+                      </span>
+                    )}
+                  </div>
                   <span className={`font-medium ${isValidDuration ? 'text-green-400' : 'text-amber-400'}`}>
-                    {selectedDuration.toFixed(1)}s
+                    Total: {totalSelectedDuration.toFixed(1)}s
                   </span>
+                </div>
+
+                {/* Segment list */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {sortedSegments.map((seg, idx) => (
+                    <button
+                      key={`${seg.start}-${seg.end}`}
+                      type="button"
+                      onClick={() => selectSegment(idx === selectedSegmentIndex ? null : idx)}
+                      className={`
+                        px-2 py-1 rounded text-xs transition-colors
+                        ${idx === selectedSegmentIndex
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }
+                      `}
+                    >
+                      {seg.start.toFixed(1)}s - {seg.end.toFixed(1)}s
+                      <span className="ml-1 text-slate-400">
+                        ({(seg.end - seg.start).toFixed(1)}s)
+                      </span>
+                    </button>
+                  ))}
                 </div>
 
                 {/* Validation message */}
@@ -214,6 +267,32 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                         {playMode === 'selection' ? 'Once' : playMode === 'loop' ? 'Loop' : 'Continue'}
                       </span>
                     </button>
+
+                    {/* Add segment button */}
+                    <button
+                      type="button"
+                      onClick={addSegment}
+                      disabled={!canAddSegment}
+                      className="btn-secondary flex items-center gap-1"
+                      aria-label="Add segment"
+                      title={canAddSegment ? 'Add another segment' : 'Maximum 5 segments'}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span className="text-xs">Add</span>
+                    </button>
+
+                    {/* Delete segment button */}
+                    {selectedSegmentIndex !== null && segments.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSegment(selectedSegmentIndex)}
+                        className="btn-secondary flex items-center gap-1 text-red-400 hover:text-red-300"
+                        aria-label="Delete selected segment"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="text-xs">Delete</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Zoom controls */}
@@ -243,7 +322,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                 </div>
 
                 <p className="text-xs text-slate-500 mt-3">
-                  Drag the edges of the selection to adjust. Use zoom for fine control.
+                  Drag segment edges to adjust. Click segment to select, then Delete key to remove.
                 </p>
               </>
             )}
@@ -280,7 +359,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
               id={`${inputId}-transcript`}
               value={transcript}
               onChange={(e) => onTranscriptChange(e.target.value)}
-              placeholder="Enter the exact words spoken in the audio..."
+              placeholder="Enter the exact words spoken in the selected segments..."
               rows={3}
               className="textarea-field"
               maxLength={2000}
@@ -324,7 +403,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                 Drop audio file here or click to upload
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                WAV, MP3, OGG · {minDuration}-{maxDuration} seconds
+                WAV, MP3, OGG · Total selection: {minDuration}-{maxDuration} seconds
               </p>
             </div>
           </div>

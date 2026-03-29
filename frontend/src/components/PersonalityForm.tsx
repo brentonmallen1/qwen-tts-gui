@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import { AudioEditor, AudioEditorHandle } from './AudioEditor'
-import { Personality } from '../hooks/usePersonalities'
+import { Personality, Segment } from '../hooks/usePersonalities'
 
 const LANGUAGES = [
   'Chinese', 'English', 'Japanese', 'Korean', 'German',
@@ -30,6 +30,7 @@ export function PersonalityForm({
   const [language, setLanguage] = useState(personality?.language || 'English')
   const [transcript, setTranscript] = useState(personality?.transcript || '')
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const [segments, setSegments] = useState<Segment[]>(personality?.segments || [])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [audioChanged, setAudioChanged] = useState(false)
 
@@ -48,14 +49,14 @@ export function PersonalityForm({
 
     setIsTranscribing(true)
     try {
-      // Get selected portion of audio, not the full file
-      const selectedAudio = await audioEditorRef.current.getSelectedAudio()
-      if (!selectedAudio) {
-        console.error('Could not get selected audio')
+      // Get full audio for transcription - user edits transcript to match segments
+      const fullAudio = await audioEditorRef.current.getFullAudio()
+      if (!fullAudio) {
+        console.error('Could not get audio')
         return
       }
 
-      const result = await transcribeAudio(selectedAudio)
+      const result = await transcribeAudio(fullAudio)
       if (result) {
         setTranscript(result)
       }
@@ -67,10 +68,13 @@ export function PersonalityForm({
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Get selected audio from the editor (trimmed to selection)
-    const selectedAudio = audioEditorRef.current
-      ? await audioEditorRef.current.getSelectedAudio()
+    // Get full audio and segments from the editor
+    const fullAudio = audioEditorRef.current
+      ? await audioEditorRef.current.getFullAudio()
       : audioBlob
+    const currentSegments = audioEditorRef.current
+      ? audioEditorRef.current.getSegments()
+      : segments
 
     if (isEditing) {
       // Update existing personality
@@ -83,11 +87,17 @@ export function PersonalityForm({
         ? { name, description, language }
         : undefined
 
+      // Always send audio form data when segments changed or audio changed
+      const segmentsChanged = JSON.stringify(currentSegments) !== JSON.stringify(personality.segments)
       let audioFormData: FormData | undefined
-      if (audioChanged && selectedAudio) {
+      if (audioChanged || segmentsChanged || transcript !== personality.transcript) {
         audioFormData = new FormData()
-        audioFormData.append('audio', selectedAudio, 'reference.wav')
         audioFormData.append('transcript', transcript)
+        audioFormData.append('segments', JSON.stringify(currentSegments))
+        // Only include audio file if a new one was uploaded
+        if (audioChanged && fullAudio) {
+          audioFormData.append('audio', fullAudio, 'original.wav')
+        }
       }
 
       if (metadata || audioFormData) {
@@ -97,18 +107,19 @@ export function PersonalityForm({
       }
     } else {
       // Create new personality
-      if (!selectedAudio || !name.trim() || !transcript.trim()) return
+      if (!fullAudio || !name.trim() || !transcript.trim()) return
 
       const formData = new FormData()
       formData.append('name', name.trim())
       formData.append('description', description.trim())
       formData.append('language', language)
       formData.append('transcript', transcript.trim())
-      formData.append('audio', selectedAudio, 'reference.wav')
+      formData.append('audio', fullAudio, 'original.wav')
+      formData.append('segments', JSON.stringify(currentSegments))
 
       await onSubmit(formData)
     }
-  }, [isEditing, name, description, language, transcript, audioBlob, audioChanged, personality, onSubmit, onCancel])
+  }, [isEditing, name, description, language, transcript, audioBlob, segments, audioChanged, personality, onSubmit, onCancel])
 
   const isValid = isEditing
     ? name.trim() && (audioChanged ? (audioBlob && transcript.trim()) : true)
@@ -191,8 +202,10 @@ export function PersonalityForm({
           {/* Audio Editor */}
           <AudioEditor
             ref={audioEditorRef}
-            audioUrl={isEditing && !audioChanged ? personality?.audio_url : undefined}
+            audioUrl={isEditing && !audioChanged ? personality?.original_url || personality?.audio_url : undefined}
+            initialSegments={isEditing && !audioChanged ? personality?.segments : undefined}
             onAudioChange={handleAudioChange}
+            onSegmentsChange={setSegments}
             transcript={transcript}
             onTranscriptChange={setTranscript}
             onTranscribe={audioBlob || (isEditing && !audioChanged) ? handleTranscribe : undefined}

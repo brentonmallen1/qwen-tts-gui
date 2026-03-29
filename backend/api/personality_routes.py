@@ -1,4 +1,5 @@
 import os
+import json
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse
 from typing import Optional
@@ -11,6 +12,7 @@ from api.personality_schemas import (
     PersonalityGenerateRequest,
     PersonalityAudioUpdate,
     TranscribeResponse,
+    Segment,
 )
 from api.schemas import Language, ModelSize, GenerationResponse
 from services.personality_service import personality_service
@@ -40,9 +42,16 @@ async def create_personality(
     language: str = Form("English"),
     transcript: str = Form(...),
     description: Optional[str] = Form(None),
+    segments: Optional[str] = Form(None),  # JSON string: [{"start": 0, "end": 5}, ...]
     audio: UploadFile = File(...),
 ):
-    """Create a new personality with audio and transcript."""
+    """Create a new personality with audio and transcript.
+
+    Args:
+        segments: Optional JSON string of segment definitions.
+                  Example: '[{"start": 2.5, "end": 8.0}, {"start": 15.0, "end": 18.5}]'
+                  If not provided, entire audio is used as one segment.
+    """
     # Validate language
     if language not in [l.value for l in Language]:
         raise HTTPException(status_code=400, detail=f"Invalid language: {language}")
@@ -62,13 +71,28 @@ async def create_personality(
             detail=f"Invalid file type '{audio.content_type}'. Allowed: WAV, MP3"
         )
 
+    # Parse segments if provided
+    parsed_segments = None
+    if segments:
+        try:
+            parsed_segments = json.loads(segments)
+            # Validate segment structure
+            if not isinstance(parsed_segments, list):
+                raise ValueError("Segments must be an array")
+            if len(parsed_segments) > 5:
+                raise HTTPException(status_code=400, detail="Maximum 5 segments allowed")
+            for seg in parsed_segments:
+                Segment(**seg)  # Validate each segment
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid segments JSON")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid segment: {e}")
+
     # Read audio data
     audio_data = await audio.read()
 
-    # Validate audio duration
-    valid, error_msg, duration = personality_service.validate_audio_duration(audio_data)
-    if not valid:
-        raise HTTPException(status_code=400, detail=error_msg)
+    # Note: We don't validate total duration here anymore since segments define what's used
+    # The frontend validates total segment duration is 3-20s
 
     try:
         personality = personality_service.create(
@@ -77,6 +101,7 @@ async def create_personality(
             language=language,
             transcript=transcript,
             audio_data=audio_data,
+            segments=parsed_segments,
         )
 
         if not personality:
@@ -128,37 +153,62 @@ async def update_personality(personality_id: str, update: PersonalityUpdate):
 async def update_personality_audio(
     personality_id: str,
     transcript: str = Form(...),
-    audio: UploadFile = File(...),
+    segments: Optional[str] = Form(None),  # JSON string: [{"start": 0, "end": 5}, ...]
+    audio: Optional[UploadFile] = File(None),
 ):
-    """Update personality audio and transcript."""
-    # Validate file size
-    if audio.size and audio.size > settings.max_upload_size:
-        max_mb = settings.max_upload_size // (1024 * 1024)
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size is {max_mb}MB"
-        )
+    """Update personality audio, segments, and/or transcript.
 
-    # Validate MIME type
-    if audio.content_type and audio.content_type not in settings.audio_types_set:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type '{audio.content_type}'. Allowed: WAV, MP3"
-        )
+    Args:
+        transcript: New transcript text
+        segments: Optional JSON string of segment definitions.
+                  If provided, reference.wav is regenerated from these segments.
+        audio: Optional new audio file. If provided, replaces original.wav.
+    """
+    audio_data = None
 
-    # Read audio data
-    audio_data = await audio.read()
+    # Handle audio upload if provided
+    if audio:
+        # Validate file size
+        if audio.size and audio.size > settings.max_upload_size:
+            max_mb = settings.max_upload_size // (1024 * 1024)
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {max_mb}MB"
+            )
 
-    # Validate audio duration
-    valid, error_msg, duration = personality_service.validate_audio_duration(audio_data)
-    if not valid:
-        raise HTTPException(status_code=400, detail=error_msg)
+        # Validate MIME type
+        if audio.content_type and audio.content_type not in settings.audio_types_set:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type '{audio.content_type}'. Allowed: WAV, MP3"
+            )
+
+        # Read audio data
+        audio_data = await audio.read()
+
+    # Parse segments if provided
+    parsed_segments = None
+    if segments:
+        try:
+            parsed_segments = json.loads(segments)
+            # Validate segment structure
+            if not isinstance(parsed_segments, list):
+                raise ValueError("Segments must be an array")
+            if len(parsed_segments) > 5:
+                raise HTTPException(status_code=400, detail="Maximum 5 segments allowed")
+            for seg in parsed_segments:
+                Segment(**seg)  # Validate each segment
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid segments JSON")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid segment: {e}")
 
     try:
         personality = personality_service.update_audio(
             personality_id=personality_id,
             transcript=transcript,
             audio_data=audio_data,
+            segments=parsed_segments,
         )
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid personality ID")
@@ -186,7 +236,7 @@ async def delete_personality(personality_id: str):
 
 @router.get("/{personality_id}/audio")
 async def get_personality_audio(personality_id: str):
-    """Serve personality reference audio."""
+    """Serve personality reference audio (concatenated segments for TTS)."""
     try:
         audio_path = personality_service.get_audio_file_path(personality_id)
     except ValueError:
@@ -198,6 +248,23 @@ async def get_personality_audio(personality_id: str):
         str(audio_path),
         media_type="audio/wav",
         filename=f"{personality_id}_reference.wav",
+    )
+
+
+@router.get("/{personality_id}/original")
+async def get_personality_original_audio(personality_id: str):
+    """Serve personality original audio (full upload for editing)."""
+    try:
+        audio_path = personality_service.get_original_audio_file_path(personality_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid personality ID")
+    if not audio_path:
+        raise HTTPException(status_code=404, detail="Original audio file not found")
+
+    return FileResponse(
+        str(audio_path),
+        media_type="audio/wav",
+        filename=f"{personality_id}_original.wav",
     )
 
 
