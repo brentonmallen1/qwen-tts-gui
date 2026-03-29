@@ -47,6 +47,15 @@ interface UseAudioEditorReturn {
   // Play mode
   playMode: PlayMode
   setPlayMode: (mode: PlayMode) => void
+  // Gathered audio
+  gatheredAudioBlob: Blob | null
+  gatheredAudioUrl: string | null
+  isGatheredStale: boolean
+  gatherSegments: () => Promise<void>
+  clearGatheredAudio: () => void
+  // Revert to original
+  canRevert: boolean
+  revertToOriginal: () => void
 }
 
 // Generate unique colors for segments
@@ -77,6 +86,10 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null)
   const [zoom, setZoom] = useState(1)
   const [playMode, setPlayModeState] = useState<PlayMode>('selection')
+  const [originalSegments, setOriginalSegments] = useState<Segment[] | null>(null)
+  const [gatheredAudioBlob, setGatheredAudioBlob] = useState<Blob | null>(null)
+  const [gatheredAudioUrl, setGatheredAudioUrl] = useState<string | null>(null)
+  const [gatheredSegments, setGatheredSegments] = useState<Segment[] | null>(null)
 
   // Keep ref in sync with state for event handlers
   const setPlayMode = useCallback((mode: PlayMode) => {
@@ -132,6 +145,12 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       resize: true,
     })
 
+    // Make regions occupy top 60% so bottom 40% is clickable for play head positioning
+    if (region.element) {
+      region.element.style.height = '60%'
+      region.element.style.top = '0'
+    }
+
     regionsMapRef.current.set(region.id, region)
     return region
   }, [])
@@ -161,6 +180,13 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       pendingSourceRef.current = null
       if (typeof source === 'string') {
         ws.load(source)
+        fetch(source).then(r => r.arrayBuffer()).then(arrayBuffer => {
+          const ctx = new AudioContext()
+          audioContextRef.current = ctx
+          ctx.decodeAudioData(arrayBuffer).then(buffer => {
+            audioBufferRef.current = buffer
+          })
+        }).catch(() => {})
       } else {
         const url = URL.createObjectURL(source)
         ws.load(url)
@@ -187,6 +213,8 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       pendingSourceRef.current = null
 
       if (initSegs && initSegs.length > 0) {
+        // Store original segments for revert functionality
+        setOriginalSegments([...initSegs])
         // Create regions from initial segments
         initSegs.forEach((seg, i) => {
           createRegion(seg.start, Math.min(seg.end, dur), i)
@@ -222,7 +250,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
 
     // Handle loop mode
     regions.on('region-out', (region: Region) => {
-      if (playModeRef.current === 'loop') {
+      if (playModeRef.current === 'loop' && wavesurferRef.current?.isPlaying()) {
         region.play()
       }
     })
@@ -246,6 +274,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setIsReady(false)
     setSegments([])
     setSelectedSegmentIndex(null)
+    setOriginalSegments(null)
     regionsMapRef.current.clear()
 
     // Clear existing regions
@@ -260,6 +289,15 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
 
     if (typeof source === 'string') {
       await wavesurferRef.current.load(source)
+      // Also fetch and decode audio buffer so getSelectedAudio/gatherSegments work for URL sources
+      try {
+        const response = await fetch(source)
+        const arrayBuffer = await response.arrayBuffer()
+        audioContextRef.current = new AudioContext()
+        audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer)
+      } catch (err) {
+        console.warn('Could not decode audio buffer from URL:', err)
+      }
     } else {
       const url = URL.createObjectURL(source)
       await wavesurferRef.current.load(url)
@@ -388,6 +426,41 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     return audioBufferToWav(newBuffer)
   }, [segments])
 
+  const revertToOriginal = useCallback(() => {
+    if (!originalSegments || !regionsRef.current || !isReady) return
+
+    regionsRef.current.clearRegions()
+    regionsMapRef.current.clear()
+
+    originalSegments.forEach((seg, i) => {
+      createRegion(seg.start, Math.min(seg.end, duration), i)
+    })
+
+    syncRegionsToState()
+    setSelectedSegmentIndex(null)
+  }, [originalSegments, isReady, duration, createRegion, syncRegionsToState])
+
+  const gatherSegments = useCallback(async () => {
+    const selected = await getSelectedAudio()
+    if (selected) {
+      if (gatheredAudioUrl) {
+        URL.revokeObjectURL(gatheredAudioUrl)
+      }
+      const url = URL.createObjectURL(selected)
+      setGatheredAudioBlob(selected)
+      setGatheredAudioUrl(url)
+      setGatheredSegments([...segments].sort((a, b) => a.start - b.start))
+    }
+  }, [getSelectedAudio, gatheredAudioUrl, segments])
+
+  const clearGatheredAudio = useCallback(() => {
+    if (gatheredAudioUrl) {
+      URL.revokeObjectURL(gatheredAudioUrl)
+    }
+    setGatheredAudioBlob(null)
+    setGatheredAudioUrl(null)
+  }, [gatheredAudioUrl])
+
   const playSelection = useCallback(() => {
     if (!wavesurferRef.current || segments.length === 0) return
 
@@ -413,8 +486,10 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       if (mode === 'continue') {
         ws.setTime(targetRegion.start)
         ws.play()
+      } else if (mode === 'selection') {
+        targetRegion.play(true)  // stopAtEnd=true: stop after playing once
       } else {
-        targetRegion.play()
+        targetRegion.play(false) // loop mode: region-out event handles replay
       }
     }
   }, [segments, selectedSegmentIndex])
@@ -455,6 +530,15 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setSelectedSegmentIndex(null)
   }, [])
 
+  const isGatheredStale = gatheredSegments !== null &&
+    JSON.stringify([...segments].sort((a, b) => a.start - b.start)) !==
+    JSON.stringify(gatheredSegments)
+
+  const segmentsMatchOriginal = originalSegments !== null &&
+    JSON.stringify([...segments].sort((a, b) => a.start - b.start)) ===
+    JSON.stringify([...originalSegments].sort((a, b) => a.start - b.start))
+  const canRevert = originalSegments !== null && !segmentsMatchOriginal
+
   return {
     waveformRef: setWaveformContainer,
     isReady,
@@ -482,6 +566,13 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     zoomOut,
     playMode,
     setPlayMode,
+    gatheredAudioBlob,
+    gatheredAudioUrl,
+    isGatheredStale,
+    gatherSegments,
+    clearGatheredAudio,
+    canRevert,
+    revertToOriginal,
   }
 }
 

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
-import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward, Plus, Trash2 } from 'lucide-react'
+import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward, Plus, Trash2, Layers, RotateCcw } from 'lucide-react'
 import { PlayMode, Segment, useAudioEditor } from '../hooks/useAudioEditor'
 
 export interface AudioEditorHandle {
   getFullAudio: () => Promise<Blob | null>
   getSelectedAudio: () => Promise<Blob | null>
   getSegments: () => Segment[]
+  getGatheredAudio: () => Blob | null
 }
 
 interface AudioEditorProps {
@@ -65,6 +66,13 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     zoomOut,
     playMode,
     setPlayMode,
+    gatheredAudioBlob,
+    gatheredAudioUrl,
+    isGatheredStale,
+    gatherSegments,
+    clearGatheredAudio,
+    canRevert,
+    revertToOriginal,
   } = useAudioEditor({ minDuration, maxDuration })
 
   // Expose methods via ref for parent to get audio and segments
@@ -72,7 +80,8 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     getFullAudio,
     getSelectedAudio,
     getSegments,
-  }), [getFullAudio, getSelectedAudio, getSegments])
+    getGatheredAudio: () => gatheredAudioBlob,
+  }), [getFullAudio, getSelectedAudio, getSegments, gatheredAudioBlob])
 
   // Load audio when file changes
   useEffect(() => {
@@ -293,6 +302,33 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                         <span className="text-xs">Delete</span>
                       </button>
                     )}
+
+                    {/* Gather segments button */}
+                    <button
+                      type="button"
+                      onClick={gatherSegments}
+                      disabled={segments.length === 0}
+                      className="btn-secondary flex items-center gap-1"
+                      aria-label="Gather audio segments"
+                      title="Combine segments into a single audio preview for transcription"
+                    >
+                      <Layers className="w-4 h-4" />
+                      <span className="text-xs">Gather</span>
+                    </button>
+
+                    {/* Revert to original button */}
+                    {canRevert && (
+                      <button
+                        type="button"
+                        onClick={revertToOriginal}
+                        className="btn-secondary flex items-center gap-1 text-amber-400 hover:text-amber-300"
+                        aria-label="Revert to original segments"
+                        title="Restore original segment positions"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span className="text-xs">Revert</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Zoom controls */}
@@ -327,6 +363,38 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
               </>
             )}
           </div>
+
+          {/* Gathered audio preview */}
+          {gatheredAudioUrl && (
+            <div className={`p-4 rounded-lg border ${
+              isGatheredStale
+                ? 'bg-amber-500/5 border-amber-500/60'
+                : 'bg-slate-800/50 border-slate-600'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Layers className={`w-4 h-4 ${isGatheredStale ? 'text-amber-400' : 'text-primary-400'}`} />
+                  <span className="text-sm font-medium text-slate-300">Gathered Audio</span>
+                  {isGatheredStale ? (
+                    <span className="text-xs text-amber-400 font-medium">
+                      Segments changed — re-gather to update
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-500">(used for transcription & cloning)</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={clearGatheredAudio}
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                  aria-label="Clear gathered audio"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <audio src={gatheredAudioUrl} controls className="w-full" />
+            </div>
+          )}
 
           {/* Transcript */}
           <div>

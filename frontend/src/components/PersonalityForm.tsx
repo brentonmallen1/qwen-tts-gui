@@ -49,14 +49,15 @@ export function PersonalityForm({
 
     setIsTranscribing(true)
     try {
-      // Get full audio for transcription - user edits transcript to match segments
-      const fullAudio = await audioEditorRef.current.getFullAudio()
-      if (!fullAudio) {
+      // Use gathered (concatenated segments) audio if available, otherwise fall back to selected audio
+      const gatheredAudio = audioEditorRef.current.getGatheredAudio()
+      const audioToTranscribe = gatheredAudio || await audioEditorRef.current.getSelectedAudio()
+      if (!audioToTranscribe) {
         console.error('Could not get audio')
         return
       }
 
-      const result = await transcribeAudio(fullAudio)
+      const result = await transcribeAudio(audioToTranscribe)
       if (result) {
         setTranscript(result)
       }
