@@ -199,6 +199,10 @@ release:
         exit 1
     fi
 
+    # Clean up local venvs that shouldn't be in Docker context
+    echo "Cleaning build context..."
+    rm -rf backend/.venv frontend/node_modules/.vite 2>/dev/null || true
+
     VERSION=$(just _calver)
     IMAGE="${DOCKER_REGISTRY}/qwen-tts"
 
@@ -227,6 +231,11 @@ release:
 release-local:
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Clean up local venvs that shouldn't be in Docker context
+    echo "Cleaning build context..."
+    rm -rf backend/.venv frontend/node_modules/.vite 2>/dev/null || true
+
     VERSION=$(just _calver)
     echo "Building qwen-tts:${VERSION} locally..."
     docker buildx build \
