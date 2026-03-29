@@ -74,6 +74,12 @@ ENV HF_HUB_CACHE=/models
 ENV TRANSFORMERS_CACHE=/models
 ENV HOST=0.0.0.0
 ENV PORT=7860
+ENV UV_NO_SYNC=1
+# App paths (override defaults for Docker volumes)
+ENV MODEL_PATH=/models
+ENV CACHE_PATH=/cache
+ENV OUTPUT_PATH=/output
+ENV PERSONALITIES_PATH=/personalities
 
 # Expose port
 EXPOSE 7860
