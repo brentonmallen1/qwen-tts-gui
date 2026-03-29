@@ -2,9 +2,8 @@ import os
 import re
 import json
 import shutil
-import librosa
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from config import get_settings
@@ -65,10 +64,14 @@ class PersonalityService:
             json.dump(metadata, f, indent=2, default=str)
 
     def _get_audio_duration(self, audio_path: Path) -> Optional[float]:
-        """Get audio duration in seconds."""
+        """Get audio duration in seconds using wave module."""
         try:
-            duration = librosa.get_duration(path=str(audio_path))
-            return round(duration, 2)
+            import wave
+            with wave.open(str(audio_path), 'rb') as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                duration = frames / float(rate)
+                return round(duration, 2)
         except Exception:
             return None
 
@@ -156,7 +159,7 @@ class PersonalityService:
             f.write(transcript)
 
         # Save metadata
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         metadata = {
             "name": name,
             "description": description,
@@ -188,7 +191,7 @@ class PersonalityService:
         if language is not None:
             metadata["language"] = language
 
-        metadata["updated_at"] = datetime.utcnow().isoformat()
+        metadata["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._save_metadata(personality_id, metadata)
 
         return self.get(personality_id)
@@ -216,7 +219,7 @@ class PersonalityService:
         # Update metadata timestamp
         metadata = self._load_metadata(personality_id)
         if metadata:
-            metadata["updated_at"] = datetime.utcnow().isoformat()
+            metadata["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._save_metadata(personality_id, metadata)
 
         return self.get(personality_id)
@@ -240,6 +243,7 @@ class PersonalityService:
     def validate_audio_duration(self, audio_data: bytes, min_sec: float = 3.0, max_sec: float = 20.0) -> tuple[bool, str, Optional[float]]:
         """Validate audio duration is within acceptable range."""
         import tempfile
+        import wave
 
         temp_path = None
         try:
@@ -248,7 +252,10 @@ class PersonalityService:
                 f.write(audio_data)
                 temp_path = f.name
 
-            duration = librosa.get_duration(path=temp_path)
+            with wave.open(temp_path, 'rb') as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                duration = frames / float(rate)
 
             if duration < min_sec:
                 return False, f"Audio must be at least {min_sec} seconds (got {duration:.1f}s)", duration
