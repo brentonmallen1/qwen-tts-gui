@@ -1,6 +1,9 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=${APP_VERSION}
+
 WORKDIR /app/frontend
 
 # Copy package files
@@ -12,7 +15,7 @@ RUN npm install
 # Copy source files
 COPY frontend/ .
 
-# Build frontend
+# Build frontend (VITE_APP_VERSION is baked in at build time)
 RUN npm run build
 
 # Stage 2: Python runtime with CUDA (Ubuntu 24.04 has Python 3.12 built-in)

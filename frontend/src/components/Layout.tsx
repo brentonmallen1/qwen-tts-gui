@@ -53,17 +53,7 @@ export function Layout({ children }: LayoutProps) {
       <footer className="border-t border-slate-800 py-6">
         <div className="max-w-6xl mx-auto px-4 text-center text-sm text-slate-500">
           <p>
-            Powered by{' '}
-            <a
-              href="https://huggingface.co/collections/Qwen/qwen3-tts"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary-400 hover:text-primary-300 transition-colors"
-              aria-label="Qwen3-TTS on Hugging Face (opens in new tab)"
-            >
-              Qwen3-TTS
-            </a>
-            {' '}· Self-hosted with Docker
+            {' '} <span className="tabular-nums">{import.meta.env.VITE_APP_VERSION || 'dev'}</span>
           </p>
         </div>
       </footer>

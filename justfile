@@ -214,6 +214,7 @@ release:
     # Build for linux/amd64 and push
     docker buildx build \
         --platform linux/amd64 \
+        --build-arg APP_VERSION="${VERSION}" \
         --tag "${IMAGE}:${VERSION}" \
         --tag "${IMAGE}:latest" \
         --push \
@@ -240,6 +241,7 @@ release-local:
     echo "Building qwen-tts:${VERSION} locally..."
     docker buildx build \
         --platform linux/amd64 \
+        --build-arg APP_VERSION="${VERSION}" \
         --tag "qwen-tts:${VERSION}" \
         --tag "qwen-tts:latest" \
         --load \
