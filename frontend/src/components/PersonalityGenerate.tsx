@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Loader2, Play, X, User, AlertCircle } from 'lucide-react'
 import { AudioPlayer } from './AudioPlayer'
 import { ModelSizeSelector } from './ModelSizeSelector'
@@ -23,7 +23,7 @@ export function PersonalityGenerate() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GenerationResult | null>(null)
-  const abortControllerRef = { current: null as AbortController | null }
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Auto-select first personality when loaded
   useEffect(() => {

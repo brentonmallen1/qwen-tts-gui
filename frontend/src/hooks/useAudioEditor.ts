@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin, { Region } from 'wavesurfer.js/dist/plugins/regions.js'
 
+export type PlayMode = 'selection' | 'loop' | 'continue'
+
 interface UseAudioEditorOptions {
   minDuration?: number
   maxDuration?: number
@@ -23,6 +25,13 @@ interface UseAudioEditorReturn {
   setRegion: (start: number, end: number) => void
   getTrimmedAudio: () => Promise<Blob | null>
   destroy: () => void
+  // Zoom controls
+  zoom: number
+  zoomIn: () => void
+  zoomOut: () => void
+  // Play mode
+  playMode: PlayMode
+  setPlayMode: (mode: PlayMode) => void
 }
 
 export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEditorReturn {
@@ -35,12 +44,21 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
   const pendingSourceRef = useRef<File | Blob | string | null>(null)
+  const playModeRef = useRef<PlayMode>('selection')
 
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [regionStart, setRegionStart] = useState(0)
   const [regionEnd, setRegionEnd] = useState(0)
+  const [zoom, setZoom] = useState(1) // pixels per second, 1 = default
+  const [playMode, setPlayModeState] = useState<PlayMode>('selection')
+
+  // Keep ref in sync with state for event handlers
+  const setPlayMode = useCallback((mode: PlayMode) => {
+    playModeRef.current = mode
+    setPlayModeState(mode)
+  }, [])
 
   const selectedDuration = regionEnd - regionStart
 
@@ -123,6 +141,13 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       setRegionEnd(region.end)
     })
 
+    // Handle loop mode - replay when region ends
+    regions.on('region-out', (region: Region) => {
+      if (playModeRef.current === 'loop' && region === activeRegionRef.current) {
+        region.play()
+      }
+    })
+
     return () => {
       ws.destroy()
       wavesurferRef.current = null
@@ -161,13 +186,42 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
 
   const playSelection = useCallback(() => {
     if (!wavesurferRef.current || !activeRegionRef.current) return
-    activeRegionRef.current.play()
+
+    const ws = wavesurferRef.current
+    const region = activeRegionRef.current
+    const mode = playModeRef.current
+
+    if (mode === 'loop') {
+      // Play region and loop - region-out handler will restart
+      region.play()
+    } else if (mode === 'continue') {
+      // Play from region start and continue past region end
+      ws.setTime(region.start)
+      ws.play()
+    } else {
+      // Default: play selection only, stop at end
+      region.play()
+    }
   }, [])
 
   const stopPlayback = useCallback(() => {
     if (!wavesurferRef.current) return
     wavesurferRef.current.pause()
   }, [])
+
+  const zoomIn = useCallback(() => {
+    if (!wavesurferRef.current) return
+    const newZoom = Math.min(zoom * 1.5, 500)
+    setZoom(newZoom)
+    wavesurferRef.current.zoom(newZoom)
+  }, [zoom])
+
+  const zoomOut = useCallback(() => {
+    if (!wavesurferRef.current) return
+    const newZoom = Math.max(zoom / 1.5, 1)
+    setZoom(newZoom)
+    wavesurferRef.current.zoom(newZoom)
+  }, [zoom])
 
   const setRegion = useCallback((start: number, end: number) => {
     if (!activeRegionRef.current) return
@@ -244,6 +298,13 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setRegion,
     getTrimmedAudio,
     destroy,
+    // Zoom controls
+    zoom,
+    zoomIn,
+    zoomOut,
+    // Play mode
+    playMode,
+    setPlayMode,
   }
 }
 

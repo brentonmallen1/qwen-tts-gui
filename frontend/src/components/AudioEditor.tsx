@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
-import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2 } from 'lucide-react'
+import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward } from 'lucide-react'
+import { PlayMode } from '../hooks/useAudioEditor'
 import { useAudioEditor } from '../hooks/useAudioEditor'
 
 export interface AudioSelection {
@@ -57,6 +58,11 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     playSelection,
     stopPlayback,
     getTrimmedAudio,
+    zoom,
+    zoomIn,
+    zoomOut,
+    playMode,
+    setPlayMode,
   } = useAudioEditor({ minDuration, maxDuration })
 
   // Expose methods via ref for parent to get selected audio
@@ -128,6 +134,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
               </p>
             </div>
             <button
+              type="button"
               onClick={handleRemove}
               aria-label="Remove audio"
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
@@ -158,28 +165,85 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                 )}
 
                 {/* Controls */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={isPlaying ? stopPlayback : playSelection}
-                    className="btn-secondary flex items-center gap-2"
-                    aria-label={isPlaying ? 'Stop playback' : 'Play selection'}
-                  >
-                    {isPlaying ? (
-                      <>
-                        <Pause className="w-4 h-4" />
-                        Stop
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4" />
-                        Preview
-                      </>
-                    )}
-                  </button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex gap-2">
+                    {/* Play/Stop button */}
+                    <button
+                      type="button"
+                      onClick={isPlaying ? stopPlayback : playSelection}
+                      className="btn-secondary flex items-center gap-2"
+                      aria-label={isPlaying ? 'Stop playback' : 'Play selection'}
+                    >
+                      {isPlaying ? (
+                        <>
+                          <Pause className="w-4 h-4" />
+                          Stop
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4" />
+                          Preview
+                        </>
+                      )}
+                    </button>
+
+                    {/* Play mode toggle */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const modes: PlayMode[] = ['selection', 'loop', 'continue']
+                        const currentIndex = modes.indexOf(playMode)
+                        setPlayMode(modes[(currentIndex + 1) % modes.length])
+                      }}
+                      className="btn-secondary flex items-center gap-2"
+                      aria-label={`Play mode: ${playMode}`}
+                      title={
+                        playMode === 'selection' ? 'Stop after selection' :
+                        playMode === 'loop' ? 'Loop selection' :
+                        'Continue after selection'
+                      }
+                    >
+                      {playMode === 'loop' ? (
+                        <Repeat className="w-4 h-4" />
+                      ) : playMode === 'continue' ? (
+                        <SkipForward className="w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      <span className="text-xs">
+                        {playMode === 'selection' ? 'Once' : playMode === 'loop' ? 'Loop' : 'Continue'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Zoom controls */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={zoomOut}
+                      disabled={zoom <= 1}
+                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Zoom out"
+                    >
+                      <ZoomOut className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs text-slate-500 min-w-[3rem] text-center">
+                      {zoom <= 1 ? '1x' : `${zoom.toFixed(0)}x`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={zoomIn}
+                      disabled={zoom >= 500}
+                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Zoom in"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-xs text-slate-500 mt-3">
-                  Drag the edges of the selection to adjust what will be used
+                  Drag the edges of the selection to adjust. Use zoom for fine control.
                 </p>
               </>
             )}
@@ -193,6 +257,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
               </label>
               {onTranscribe && (
                 <button
+                  type="button"
                   onClick={onTranscribe}
                   disabled={isTranscribing || !isReady}
                   className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
