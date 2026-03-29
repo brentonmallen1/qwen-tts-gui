@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
-import { AudioEditor } from './AudioEditor'
+import { AudioEditor, AudioEditorHandle } from './AudioEditor'
 import { Personality } from '../hooks/usePersonalities'
 
 const LANGUAGES = [
@@ -33,6 +33,8 @@ export function PersonalityForm({
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [audioChanged, setAudioChanged] = useState(false)
 
+  const audioEditorRef = useRef<AudioEditorHandle>(null)
+
   const handleAudioChange = useCallback((blob: Blob | null) => {
     setAudioBlob(blob)
     setAudioChanged(true)
@@ -42,21 +44,33 @@ export function PersonalityForm({
   }, [])
 
   const handleTranscribe = useCallback(async () => {
-    if (!audioBlob) return
+    if (!audioEditorRef.current) return
 
     setIsTranscribing(true)
     try {
-      const result = await transcribeAudio(audioBlob)
+      // Get selected portion of audio, not the full file
+      const selectedAudio = await audioEditorRef.current.getSelectedAudio()
+      if (!selectedAudio) {
+        console.error('Could not get selected audio')
+        return
+      }
+
+      const result = await transcribeAudio(selectedAudio)
       if (result) {
         setTranscript(result)
       }
     } finally {
       setIsTranscribing(false)
     }
-  }, [audioBlob, transcribeAudio])
+  }, [transcribeAudio])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Get selected audio from the editor (trimmed to selection)
+    const selectedAudio = audioEditorRef.current
+      ? await audioEditorRef.current.getSelectedAudio()
+      : audioBlob
 
     if (isEditing) {
       // Update existing personality
@@ -70,9 +84,9 @@ export function PersonalityForm({
         : undefined
 
       let audioFormData: FormData | undefined
-      if (audioChanged && audioBlob) {
+      if (audioChanged && selectedAudio) {
         audioFormData = new FormData()
-        audioFormData.append('audio', audioBlob, 'reference.wav')
+        audioFormData.append('audio', selectedAudio, 'reference.wav')
         audioFormData.append('transcript', transcript)
       }
 
@@ -83,14 +97,14 @@ export function PersonalityForm({
       }
     } else {
       // Create new personality
-      if (!audioBlob || !name.trim() || !transcript.trim()) return
+      if (!selectedAudio || !name.trim() || !transcript.trim()) return
 
       const formData = new FormData()
       formData.append('name', name.trim())
       formData.append('description', description.trim())
       formData.append('language', language)
       formData.append('transcript', transcript.trim())
-      formData.append('audio', audioBlob, 'reference.wav')
+      formData.append('audio', selectedAudio, 'reference.wav')
 
       await onSubmit(formData)
     }
@@ -176,11 +190,12 @@ export function PersonalityForm({
 
           {/* Audio Editor */}
           <AudioEditor
+            ref={audioEditorRef}
             audioUrl={isEditing && !audioChanged ? personality?.audio_url : undefined}
             onAudioChange={handleAudioChange}
             transcript={transcript}
             onTranscriptChange={setTranscript}
-            onTranscribe={audioBlob ? handleTranscribe : undefined}
+            onTranscribe={audioBlob || (isEditing && !audioChanged) ? handleTranscribe : undefined}
             isTranscribing={isTranscribing}
             label={isEditing ? 'Reference Audio (upload new to replace)' : 'Reference Audio *'}
           />
