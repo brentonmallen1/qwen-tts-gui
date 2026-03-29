@@ -13,13 +13,13 @@
   <Shell>bash</Shell>
 
   <!-- Application Info -->
-  <Support>https://github.com/mallen7/qwen-tts/issues</Support>
-  <Project>https://github.com/mallen7/qwen-tts</Project>
+  <Support></Support>
+  <Project>https://github.com/brentonmallen1/qwen-tts-gui</Project>
   <Overview>Self-hosted text-to-speech with voice cloning using Qwen3-TTS. Features voice cloning from reference audio, voice design from text descriptions, and custom preset voices. Supports 10 languages with GPU acceleration.</Overview>
   <Category>MediaApp:Speech Productivity:</Category>
   <WebUI>http://[IP]:[PORT:7860]/</WebUI>
-  <TemplateURL>https://raw.githubusercontent.com/mallen7/qwen-tts/main/qwen-tts.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/mallen7/qwen-tts/main/icon.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/brentonmallen1/qwen-tts-gui/main/unraid/qwen-tts.xml</TemplateURL>
+  <Icon></Icon>
   <ExtraParams>--runtime=nvidia --shm-size=4g</ExtraParams>
   <Requires>NVIDIA GPU with CUDA support and NVIDIA Container Toolkit installed</Requires>
   <Date>2026-03-29</Date>
