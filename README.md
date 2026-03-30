@@ -22,20 +22,32 @@ A simple, lightweight, self-hosted, Docker-deployable web interface for [Qwen3-T
 <table>
   <tr>
     <td align="center">
-      <img src="screenshots/screenshot-voice-clone.png" width="100%" alt="Voice Clone Mode"/>
+      <img src="screenshots/screenshot-voice-clone.png" width="75%" alt="Voice Clone Mode"/>
       <br/><b>Voice Clone</b> - Clone any voice from reference audio
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="screenshots/screenshot-voice-design.png" width="100%" alt="Voice Design Mode"/>
+      <img src="screenshots/screenshot-voice-design.png" width="75%" alt="Voice Design Mode"/>
       <br/><b>Voice Design</b> - Create voices from text descriptions
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="screenshots/screenshot-custom-voice.png" width="100%" alt="Custom Voice Mode"/>
+      <img src="screenshots/screenshot-custom-voice.png" width="75%" alt="Custom Voice Mode"/>
       <br/><b>Custom Voice</b> - Use preset speakers with emotional control
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="screenshots/screenshot-personalities.png" width="75%" alt="Personalities"/>
+      <br/><b>Personalities</b> - Store personality audio snippets
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="screenshots/screenshot-personality-speak.png" width="75%" alt="Personality Speak"/>
+      <br/><b>Personality Speak</b> - User personalities for fast cloning
     </td>
   </tr>
 </table>
