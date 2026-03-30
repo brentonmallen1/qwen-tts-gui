@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Note: Voice Design requires 1.7B - only Voice Clone and Custom Voice work with 0.6B
     enabled_model_sizes: str = "1.7B"  # Comma-separated: "0.6B", "1.7B", or "0.6B,1.7B"
     preload_models: bool = False
+    model_keep_alive_mins: int = 5  # Minutes to keep models in GPU memory after last use (0 = never unload)
 
     @property
     def enabled_sizes(self) -> list[str]:

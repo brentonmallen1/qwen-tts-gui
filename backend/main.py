@@ -1,3 +1,4 @@
+import asyncio
 import os
 import secrets
 from contextlib import asynccontextmanager
@@ -108,7 +109,21 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.error(f"Failed to preload model {size}: {e}")
 
+    # Start model keep-alive cleanup task
+    cleanup_task = None
+    if not settings.mock_mode:
+        from services.tts_service import tts_service
+        cleanup_task = asyncio.create_task(tts_service.cleanup_idle_models())
+        if tts_service.keep_alive_seconds > 0:
+            logger.info(f"Model keep-alive: {settings.model_keep_alive_mins} min (MODEL_KEEP_ALIVE_MINS)")
+        else:
+            logger.info("Model keep-alive: disabled (MODEL_KEEP_ALIVE_MINS=0)")
+
     yield
+
+    # Cancel cleanup task on shutdown
+    if cleanup_task:
+        cleanup_task.cancel()
 
     # Shutdown
     logger.info("Shutting down Qwen3-TTS Server")

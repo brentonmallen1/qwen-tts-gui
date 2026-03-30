@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import torch
@@ -5,6 +6,7 @@ import soundfile as sf
 from pathlib import Path
 from typing import Optional, Tuple
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 import logging
 
 from config import get_settings
@@ -90,6 +92,8 @@ def _log_memory_usage(stage: str = ""):
 class TTSService:
     def __init__(self):
         self._models: dict = {}
+        self._model_last_used: dict[str, datetime] = {}
+        self.keep_alive_seconds = settings.model_keep_alive_mins * 60
 
         # Log GPU info on init
         _log_gpu_info()
@@ -114,6 +118,26 @@ class TTSService:
     def _get_model_key(self, mode: str, size: str) -> str:
         return f"{mode}_{size}"
 
+    def _unload_model(self, key: str) -> None:
+        """Unload a model and free GPU memory."""
+        if key in self._models:
+            del self._models[key]
+            self._model_last_used.pop(key, None)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            logger.info(f"Unloaded model '{key}' due to inactivity")
+
+    async def cleanup_idle_models(self) -> None:
+        """Background task: unload models idle longer than keep_alive_seconds."""
+        if self.keep_alive_seconds <= 0:
+            return  # Keep-alive disabled
+        while True:
+            await asyncio.sleep(60)
+            cutoff = datetime.now() - timedelta(seconds=self.keep_alive_seconds)
+            for key in list(self._model_last_used.keys()):
+                if self._model_last_used[key] < cutoff:
+                    self._unload_model(key)
+
     def _load_model(self, mode: str, size: str):
         """Load a model if not already loaded."""
         from qwen_tts import Qwen3TTSModel
@@ -122,6 +146,7 @@ class TTSService:
 
         if key in self._models:
             logger.info(f"Model {key} already loaded, reusing")
+            self._model_last_used[key] = datetime.now()
             return self._models[key]
 
         model_name = MODELS.get(mode, {}).get(size)
@@ -157,6 +182,7 @@ class TTSService:
         try:
             model = Qwen3TTSModel.from_pretrained(model_name, **kwargs)
             self._models[key] = model
+            self._model_last_used[key] = datetime.now()
             logger.info(f"Model {key} loaded successfully")
             _log_memory_usage("after model load")
             return model
