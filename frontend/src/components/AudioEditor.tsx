@@ -177,7 +177,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
 
           {/* Waveform */}
           <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">
-            <div ref={waveformRef} className="mb-3" />
+            <div ref={waveformRef} className="mb-3" role="img" aria-label="Audio waveform editor" />
 
             {isReady && (
               <>
@@ -227,8 +227,8 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                 )}
 
                 {/* Controls */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {/* Play/Stop button */}
                     <button
                       type="button"
@@ -258,11 +258,11 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                         setPlayMode(modes[(currentIndex + 1) % modes.length])
                       }}
                       className="btn-secondary flex items-center gap-2"
-                      aria-label={`Play mode: ${playMode}`}
+                      aria-label={`Play mode: ${playMode === 'selection' ? 'Once' : playMode === 'loop' ? 'Loop' : 'Continue'}. Click to change.`}
                       title={
-                        playMode === 'selection' ? 'Stop after selection' :
-                        playMode === 'loop' ? 'Loop selection' :
-                        'Continue after selection'
+                        playMode === 'selection' ? 'Switch to: Loop' :
+                        playMode === 'loop' ? 'Switch to: Continue after selection' :
+                        'Switch to: Once (stop after selection)'
                       }
                     >
                       {playMode === 'loop' ? (
@@ -332,7 +332,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                   </div>
 
                   {/* Zoom controls */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 ml-auto">
                     <button
                       type="button"
                       onClick={zoomOut}

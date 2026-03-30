@@ -43,7 +43,7 @@ export function TabNav({ activeTab, onTabChange }: TabNavProps) {
           flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg
           font-medium text-sm transition-colors duration-200
           ${isActive
-            ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/25'
+            ? 'bg-primary-600 text-white shadow-lg'
             : isDisabled
               ? 'text-slate-500 cursor-not-allowed'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
@@ -60,8 +60,8 @@ export function TabNav({ activeTab, onTabChange }: TabNavProps) {
     <div role="tablist" aria-label="Voice generation modes" className="flex gap-2 p-1 bg-slate-800/50 rounded-xl mb-8">
       {modeTabs.map(renderTab)}
 
-      {/* Personality tabs grouped in a pill container */}
-      <div className="flex gap-1 p-1 bg-slate-700/50 rounded-lg">
+      {/* Personality tabs grouped in a pill container — role="none" keeps tabs as direct tablist children per WAI-ARIA */}
+      <div role="none" className="flex gap-1 p-1 bg-slate-700/50 rounded-lg">
         {personalityTabs.map(renderTab)}
       </div>
     </div>

@@ -77,7 +77,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
   const pendingSourceRef = useRef<{ source: File | Blob | string; segments?: Segment[] } | null>(null)
-  const playModeRef = useRef<PlayMode>('selection')
+  const playModeRef = useRef<PlayMode>('continue')
 
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -85,7 +85,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const [segments, setSegments] = useState<Segment[]>([])
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number | null>(null)
   const [zoom, setZoom] = useState(1)
-  const [playMode, setPlayModeState] = useState<PlayMode>('selection')
+  const [playMode, setPlayModeState] = useState<PlayMode>('continue')
   const [originalSegments, setOriginalSegments] = useState<Segment[] | null>(null)
   const [gatheredAudioBlob, setGatheredAudioBlob] = useState<Blob | null>(null)
   const [gatheredAudioUrl, setGatheredAudioUrl] = useState<string | null>(null)
@@ -310,34 +310,34 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   }, [])
 
   const addSegment = useCallback(() => {
-    if (!regionsRef.current || !isReady || segments.length >= maxSegments) return
+    if (!regionsRef.current || !wavesurferRef.current || !isReady || segments.length >= maxSegments) return
 
-    // Find a gap to place the new segment, or place at end
-    const sorted = [...segments].sort((a, b) => a.start - b.start)
-    let newStart = 0
-    let newEnd = Math.min(2, duration) // 2 second default length
+    const segmentLength = 2 // 2 second default
+    const currentTime = wavesurferRef.current.getCurrentTime()
 
-    // Try to find a gap
-    for (let i = 0; i < sorted.length; i++) {
-      const gapStart = i === 0 ? 0 : sorted[i - 1].end
-      const gapEnd = sorted[i].start
-
-      if (gapEnd - gapStart >= 1) {
-        newStart = gapStart
-        newEnd = Math.min(gapStart + 2, gapEnd)
-        break
-      }
+    // Center segment on playhead, clamped to audio bounds
+    let newStart = Math.max(0, currentTime - segmentLength / 2)
+    let newEnd = Math.min(duration, newStart + segmentLength)
+    // Shift start back if we hit the end
+    if (newEnd - newStart < segmentLength) {
+      newStart = Math.max(0, newEnd - segmentLength)
     }
 
-    // If no gap found, try after the last segment
-    if (newStart === 0 && sorted.length > 0) {
-      const lastEnd = sorted[sorted.length - 1].end
-      if (duration - lastEnd >= 1) {
-        newStart = lastEnd
-        newEnd = Math.min(lastEnd + 2, duration)
-      } else {
-        // No space available
-        return
+    // If it would overlap an existing segment, fall back to finding a gap
+    const sorted = [...segments].sort((a, b) => a.start - b.start)
+    const wouldOverlap = sorted.some(seg => !(newEnd <= seg.start || newStart >= seg.end))
+
+    if (wouldOverlap) {
+      // Find first available gap
+      for (let i = 0; i <= sorted.length; i++) {
+        const gapStart = i === 0 ? 0 : sorted[i - 1].end
+        const gapEnd = i === sorted.length ? duration : sorted[i].start
+        if (gapEnd - gapStart >= 1) {
+          newStart = gapStart
+          newEnd = Math.min(gapStart + segmentLength, gapEnd)
+          break
+        }
+        if (i === sorted.length) return // no space
       }
     }
 
@@ -405,18 +405,33 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     const offlineCtx = new OfflineAudioContext(numberOfChannels, totalFrames, sampleRate)
     const newBuffer = offlineCtx.createBuffer(numberOfChannels, totalFrames, sampleRate)
 
-    // Copy segment data into new buffer
+    // 25ms fade in/out at segment boundaries to avoid pops/clicks
+    const fadeSamples = Math.floor(sampleRate * 0.025)
+
+    // Copy segment data into new buffer with crossfades
     let destOffset = 0
-    for (const seg of sortedSegments) {
+    for (let segIdx = 0; segIdx < sortedSegments.length; segIdx++) {
+      const seg = sortedSegments[segIdx]
       const startFrame = Math.floor(seg.start * sampleRate)
       const endFrame = Math.floor(seg.end * sampleRate)
       const frameCount = endFrame - startFrame
+      const isFirst = segIdx === 0
+      const isLast = segIdx === sortedSegments.length - 1
 
       for (let channel = 0; channel < numberOfChannels; channel++) {
         const sourceData = buffer.getChannelData(channel)
         const destData = newBuffer.getChannelData(channel)
         for (let i = 0; i < frameCount; i++) {
-          destData[destOffset + i] = sourceData[startFrame + i]
+          let sample = sourceData[startFrame + i]
+          // Fade in at start of each segment (except the first)
+          if (!isFirst && i < fadeSamples) {
+            sample *= i / fadeSamples
+          }
+          // Fade out at end of each segment (except the last)
+          if (!isLast && i >= frameCount - fadeSamples) {
+            sample *= (frameCount - i) / fadeSamples
+          }
+          destData[destOffset + i] = sample
         }
       }
       destOffset += frameCount

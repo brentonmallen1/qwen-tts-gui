@@ -190,7 +190,11 @@ export function VoiceClone() {
           {isLoading ? (
             <div className="space-y-3">
               <div className="flex gap-3">
-                <div className="flex-1 btn-primary flex items-center justify-center gap-2 cursor-wait">
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 btn-primary flex items-center justify-center gap-2 cursor-wait"
+                >
                   <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                   <span aria-live="polite">
                     {!isModelDownloaded
@@ -200,7 +204,7 @@ export function VoiceClone() {
                         : 'Generating audio...'
                     }
                   </span>
-                </div>
+                </button>
                 <button
                   onClick={cancelGeneration}
                   className="btn-secondary px-4 flex items-center gap-2"

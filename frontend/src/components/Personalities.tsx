@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { Plus, Trash2, Edit2, User, Loader2, AlertCircle, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Edit2, User, Loader2, AlertCircle, Search, ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import { usePersonalities, Personality } from '../hooks/usePersonalities'
 import { PersonalityForm } from './PersonalityForm'
 
@@ -18,6 +18,7 @@ export function Personalities() {
   const [showForm, setShowForm] = useState(false)
   const [editingPersonality, setEditingPersonality] = useState<Personality | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 15
@@ -83,13 +84,10 @@ export function Personalities() {
   }, [updatePersonality, updatePersonalityAudio])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('Are you sure you want to delete this personality?')) {
-      return
-    }
-
     setDeletingId(id)
     await deletePersonality(id)
     setDeletingId(null)
+    setConfirmDeleteId(null)
   }, [deletePersonality])
 
   const handleEdit = useCallback((personality: Personality) => {
@@ -129,6 +127,7 @@ export function Personalities() {
             </p>
           </div>
           <button
+            type="button"
             onClick={() => setShowForm(true)}
             className="btn-primary flex items-center gap-2"
           >
@@ -146,6 +145,7 @@ export function Personalities() {
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search personalities..."
+              aria-label="Search personalities"
               className="input-field pl-10"
             />
           </div>
@@ -177,6 +177,7 @@ export function Personalities() {
               Create your first voice personality to get started
             </p>
             <button
+              type="button"
               onClick={() => setShowForm(true)}
               className="btn-primary inline-flex items-center gap-2"
             >
@@ -196,7 +197,7 @@ export function Personalities() {
         {/* Personalities list */}
         {paginatedPersonalities.length > 0 && (
           <>
-            <div className="max-h-[600px] overflow-y-auto">
+            <div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {paginatedPersonalities.map((personality) => (
                   <div
@@ -234,24 +235,47 @@ export function Personalities() {
 
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => handleEdit(personality)}
                         className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm"
                       >
                         <Edit2 className="w-4 h-4" />
                         Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(personality.id)}
-                        disabled={deletingId === personality.id}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                        aria-label="Delete personality"
-                      >
-                        {deletingId === personality.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
+                      {confirmDeleteId === personality.id ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(personality.id)}
+                            disabled={deletingId === personality.id}
+                            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                            aria-label="Confirm delete"
+                          >
+                            {deletingId === personality.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                            aria-label="Cancel delete"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(personality.id)}
+                          className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          aria-label="Delete personality"
+                        >
                           <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

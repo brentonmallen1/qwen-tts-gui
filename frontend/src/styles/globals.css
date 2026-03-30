@@ -43,7 +43,7 @@
   }
 
   .card {
-    @apply bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6;
+    @apply bg-slate-800 border border-slate-700/50 rounded-xl p-6;
   }
 
   .tab-button {
@@ -51,7 +51,7 @@
   }
 
   .tab-button-active {
-    @apply bg-primary-600 text-white shadow-lg shadow-primary-600/25;
+    @apply bg-primary-600 text-white shadow-lg;
   }
 
   .tab-button-inactive {
@@ -59,7 +59,13 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+/* Custom scrollbar — WebKit */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

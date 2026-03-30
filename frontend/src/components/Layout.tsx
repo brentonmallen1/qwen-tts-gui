@@ -17,9 +17,9 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
               <Mic2 className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -51,10 +51,8 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Footer */}
       <footer className="border-t border-slate-800 py-6">
-        <div className="max-w-6xl mx-auto px-4 text-center text-sm text-slate-500">
-          <p>
-            {' '} <span className="tabular-nums">{import.meta.env.VITE_APP_VERSION || 'dev'}</span>
-          </p>
+        <div className="max-w-4xl mx-auto px-4 text-center text-sm text-slate-500">
+          <p>Version <span className="tabular-nums">{import.meta.env.VITE_APP_VERSION || 'dev'}</span></p>
         </div>
       </footer>
     </div>
