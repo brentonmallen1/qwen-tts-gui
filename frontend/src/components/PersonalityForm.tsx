@@ -69,10 +69,8 @@ export function PersonalityForm({
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Get full audio and segments from the editor
-    const fullAudio = audioEditorRef.current
-      ? await audioEditorRef.current.getFullAudio()
-      : audioBlob
+    // Get original file (native format) and segments from the editor
+    const originalFile = audioEditorRef.current?.getOriginalFile() ?? null
     const currentSegments = audioEditorRef.current
       ? audioEditorRef.current.getSegments()
       : segments
@@ -96,8 +94,8 @@ export function PersonalityForm({
         audioFormData.append('transcript', transcript)
         audioFormData.append('segments', JSON.stringify(currentSegments))
         // Only include audio file if a new one was uploaded
-        if (audioChanged && fullAudio) {
-          audioFormData.append('audio', fullAudio, 'original.wav')
+        if (audioChanged && originalFile) {
+          audioFormData.append('audio', originalFile, originalFile.name)
         }
       }
 
@@ -108,14 +106,14 @@ export function PersonalityForm({
       }
     } else {
       // Create new personality
-      if (!fullAudio || !name.trim() || !transcript.trim()) return
+      if (!originalFile || !name.trim() || !transcript.trim()) return
 
       const formData = new FormData()
       formData.append('name', name.trim())
       formData.append('description', description.trim())
       formData.append('language', language)
       formData.append('transcript', transcript.trim())
-      formData.append('audio', fullAudio, 'original.wav')
+      formData.append('audio', originalFile, originalFile.name)
       formData.append('segments', JSON.stringify(currentSegments))
 
       await onSubmit(formData)

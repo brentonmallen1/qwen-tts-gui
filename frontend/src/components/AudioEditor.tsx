@@ -3,6 +3,7 @@ import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Rep
 import { PlayMode, Segment, useAudioEditor } from '../hooks/useAudioEditor'
 
 export interface AudioEditorHandle {
+  getOriginalFile: () => File | null
   getFullAudio: () => Promise<Blob | null>
   getSelectedAudio: () => Promise<Blob | null>
   getSegments: () => Segment[]
@@ -57,6 +58,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     removeSegment,
     selectSegment,
     getSegments,
+    getOriginalFile,
     getFullAudio,
     getSelectedAudio,
     playSelection,
@@ -77,11 +79,12 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
 
   // Expose methods via ref for parent to get audio and segments
   useImperativeHandle(ref, () => ({
+    getOriginalFile,
     getFullAudio,
     getSelectedAudio,
     getSegments,
     getGatheredAudio: () => gatheredAudioBlob,
-  }), [getFullAudio, getSelectedAudio, getSegments, gatheredAudioBlob])
+  }), [getOriginalFile, getFullAudio, getSelectedAudio, getSegments, gatheredAudioBlob])
 
   // Load audio when file changes
   useEffect(() => {

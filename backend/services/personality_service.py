@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import json
@@ -133,6 +134,17 @@ class PersonalityService:
             print(f"Error concatenating segments: {e}")
             return False
 
+    def _save_as_wav(self, audio_data: bytes, output_path: Path) -> None:
+        """Save audio bytes to output_path as WAV, converting from any format if necessary."""
+        # WAV files start with RIFF....WAVE
+        if audio_data[:4] == b'RIFF' and audio_data[8:12] == b'WAVE':
+            with open(output_path, 'wb') as f:
+                f.write(audio_data)
+        else:
+            from pydub import AudioSegment
+            audio = AudioSegment.from_file(io.BytesIO(audio_data))
+            audio.export(str(output_path), format="wav")
+
     def _ensure_original_exists(self, personality_id: str) -> bool:
         """
         Ensure original.wav exists (for migration of old personalities).
@@ -264,10 +276,9 @@ class PersonalityService:
         # Create directory
         personality_path.mkdir(parents=True, exist_ok=True)
 
-        # Save original audio file
+        # Save original audio file (convert to WAV if needed)
         original_path = self._get_original_audio_path(personality_id)
-        with open(original_path, 'wb') as f:
-            f.write(audio_data)
+        self._save_as_wav(audio_data, original_path)
 
         # If no segments provided, use full audio duration
         if not segments:
@@ -346,10 +357,9 @@ class PersonalityService:
         original_path = self._get_original_audio_path(personality_id)
         reference_path = self._get_audio_path(personality_id)
 
-        # If new audio provided, save as original
+        # If new audio provided, save as original (convert to WAV if needed)
         if audio_data:
-            with open(original_path, 'wb') as f:
-                f.write(audio_data)
+            self._save_as_wav(audio_data, original_path)
 
             # If no segments provided with new audio, use full duration
             if not segments:

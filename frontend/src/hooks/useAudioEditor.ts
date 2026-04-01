@@ -35,6 +35,7 @@ interface UseAudioEditorReturn {
   removeSegment: (index: number) => void
   selectSegment: (index: number | null) => void
   getSegments: () => Segment[]
+  getOriginalFile: () => File | null
   getFullAudio: () => Promise<Blob | null>
   getSelectedAudio: () => Promise<Blob | null>
   playSelection: () => void
@@ -76,6 +77,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const regionsMapRef = useRef<Map<string, Region>>(new Map())
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
+  const originalFileRef = useRef<File | null>(null)
   const pendingSourceRef = useRef<{ source: File | Blob | string; segments?: Segment[] } | null>(null)
   const playModeRef = useRef<PlayMode>('continue')
 
@@ -264,6 +266,9 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   }, [waveformContainer, maxDuration, createRegion, syncRegionsToState])
 
   const loadAudio = useCallback(async (source: File | Blob | string, initSegments?: Segment[]) => {
+    // Track the original file (only File objects, not Blobs or URLs)
+    originalFileRef.current = source instanceof File ? source : null
+
     // If WaveSurfer isn't ready yet, store the source to load later
     if (!wavesurferRef.current) {
       pendingSourceRef.current = { source, segments: initSegments }
@@ -371,6 +376,10 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const getSegments = useCallback((): Segment[] => {
     return [...segments].sort((a, b) => a.start - b.start)
   }, [segments])
+
+  const getOriginalFile = useCallback((): File | null => {
+    return originalFileRef.current
+  }, [])
 
   const getFullAudio = useCallback(async (): Promise<Blob | null> => {
     if (!audioBufferRef.current || !audioContextRef.current) {
@@ -571,6 +580,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     removeSegment,
     selectSegment,
     getSegments,
+    getOriginalFile,
     getFullAudio,
     getSelectedAudio,
     playSelection,
