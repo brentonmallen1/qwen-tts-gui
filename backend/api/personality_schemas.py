@@ -26,6 +26,7 @@ class PersonalityBase(BaseModel):
 
 class PersonalityCreate(PersonalityBase):
     transcript: str = Field(..., min_length=1, max_length=2000)
+    enhancement_method: Optional[str] = Field(None, description="Enhancement applied to audio: deepfilter, lavasr, chain, or None")
 
 
 class PersonalityUpdate(BaseModel):
@@ -49,6 +50,7 @@ class PersonalityResponse(BaseModel):
     original_url: Optional[str] = None  # URL to original.wav (full upload for editing)
     segments: list[Segment] = []  # Segment definitions from original
     audio_duration: Optional[float] = None  # Duration of reference.wav
+    enhancement_method: Optional[str] = None  # Enhancement applied at save time
     created_at: datetime
     updated_at: datetime
 

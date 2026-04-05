@@ -16,6 +16,7 @@ from api.personality_schemas import (
 )
 from api.schemas import Language, ModelSize, GenerationResponse
 from services.personality_service import personality_service
+from services.audio_enhancement_service import audio_enhancement_service
 from config import get_settings
 from auth import get_auth_dependency
 from logging_config import get_logger
@@ -43,6 +44,8 @@ async def create_personality(
     transcript: str = Form(...),
     description: Optional[str] = Form(None),
     segments: Optional[str] = Form(None),  # JSON string: [{"start": 0, "end": 5}, ...]
+    enhancement_method: Optional[str] = Form(None),  # "deepfilter", "lavasr", "chain", or None
+    enhancement_preset: Optional[str] = Form("medium"),
     audio: UploadFile = File(...),
 ):
     """Create a new personality with audio and transcript.
@@ -91,6 +94,21 @@ async def create_personality(
     # Read audio data
     audio_data = await audio.read()
 
+    # Auto-enhance if a method was requested
+    if enhancement_method and settings.enhancement_enabled:
+        _valid_methods = {"deepfilter", "lavasr", "chain"}
+        _valid_presets = {"light", "medium", "aggressive"}
+        if enhancement_method not in _valid_methods:
+            raise HTTPException(status_code=400, detail=f"Invalid enhancement method: {enhancement_method}")
+        preset = enhancement_preset if enhancement_preset in _valid_presets else "medium"
+        try:
+            audio_data = audio_enhancement_service.enhance(audio_data, method=enhancement_method, preset=preset)
+            logger.info(f"Auto-enhanced audio: method={enhancement_method}, preset={preset}")
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        except Exception as e:
+            logger.warning(f"Auto-enhancement failed, using original audio: {e}")
+
     # Note: We don't validate total duration here anymore since segments define what's used
     # The frontend validates total segment duration is 3-20s
 
@@ -102,6 +120,7 @@ async def create_personality(
             transcript=transcript,
             audio_data=audio_data,
             segments=parsed_segments,
+            enhancement_method=enhancement_method,
         )
 
         if not personality:

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
-import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward, Plus, Trash2, Layers, RotateCcw } from 'lucide-react'
+import { Upload, Play, Pause, Loader2, FileAudio, X, Wand2, ZoomIn, ZoomOut, Repeat, Square, SkipForward, Plus, Trash2, Layers, RotateCcw, Sparkles } from 'lucide-react'
 import { PlayMode, Segment, useAudioEditor } from '../hooks/useAudioEditor'
+import { useAppConfig } from '../context/ConfigContext'
 
 export interface AudioEditorHandle {
   getOriginalFile: () => File | null
@@ -25,6 +26,18 @@ interface AudioEditorProps {
   label?: string
 }
 
+const METHOD_LABELS: Record<string, string> = {
+  deepfilter: 'Denoise (DeepFilterNet)',
+  lavasr: 'Enhance Quality (LavaSR)',
+  chain: 'Full Enhancement (Denoise + Enhance)',
+}
+
+const PRESET_LABELS: Record<string, string> = {
+  light: 'Light (30%)',
+  medium: 'Medium (70%)',
+  aggressive: 'Aggressive (100%)',
+}
+
 export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(function AudioEditor({
   audioFile,
   audioUrl,
@@ -41,6 +54,9 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
 }, ref) {
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedMethod, setSelectedMethod] = useState('deepfilter')
+  const [selectedPreset, setSelectedPreset] = useState('medium')
+  const { enhancementEnabled, enhancementMethods } = useAppConfig()
 
   const {
     waveformRef,
@@ -75,6 +91,11 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     clearGatheredAudio,
     canRevert,
     revertToOriginal,
+    isEnhancing,
+    enhancementError,
+    canRevertEnhancement,
+    enhanceAudio,
+    revertEnhancement,
   } = useAudioEditor({ minDuration, maxDuration })
 
   // Expose methods via ref for parent to get audio and segments
@@ -190,6 +211,63 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Audio Enhancement */}
+          {enhancementEnabled && enhancementMethods.length > 0 && (
+            <div className="p-3 bg-slate-800 border border-slate-700 rounded-lg space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary-400 shrink-0" />
+                <span className="text-xs font-medium text-slate-300">Enhance Audio</span>
+                <div className="flex flex-wrap gap-2 flex-1">
+                  <select
+                    value={selectedMethod}
+                    onChange={(e) => setSelectedMethod(e.target.value)}
+                    disabled={isEnhancing}
+                    className="select-field text-xs py-1 flex-1 min-w-[160px]"
+                  >
+                    {enhancementMethods.map((m) => (
+                      <option key={m} value={m}>{METHOD_LABELS[m] ?? m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedPreset}
+                    onChange={(e) => setSelectedPreset(e.target.value)}
+                    disabled={isEnhancing}
+                    className="select-field text-xs py-1 w-36"
+                  >
+                    {Object.entries(PRESET_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => enhanceAudio(selectedMethod, selectedPreset)}
+                    disabled={isEnhancing || !isReady}
+                    className="btn-secondary flex items-center gap-1.5 text-xs py-1"
+                  >
+                    {isEnhancing ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" />Enhancing...</>
+                    ) : (
+                      <><Sparkles className="w-3.5 h-3.5" />Enhance</>
+                    )}
+                  </button>
+                  {canRevertEnhancement && (
+                    <button
+                      type="button"
+                      onClick={revertEnhancement}
+                      disabled={isEnhancing}
+                      className="btn-secondary flex items-center gap-1.5 text-xs py-1 text-amber-400 hover:text-amber-300"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />Revert
+                    </button>
+                  )}
+                </div>
+              </div>
+              {enhancementError && (
+                <p className="text-xs text-red-400">{enhancementError}</p>
+              )}
+            </div>
+          )}
 
           {/* Waveform */}
           <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">

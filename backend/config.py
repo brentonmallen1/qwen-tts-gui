@@ -33,6 +33,14 @@ class Settings(BaseSettings):
         """Parse enabled model sizes into a list."""
         return [s.strip() for s in self.enabled_model_sizes.split(",") if s.strip()]
 
+    # Audio Enhancement
+    enhancement_enabled: bool = True
+    enhancement_methods: str = "deepfilter,lavasr,chain"  # Comma-separated available methods
+
+    @property
+    def enhancement_methods_list(self) -> list[str]:
+        return [m.strip() for m in self.enhancement_methods.split(",") if m.strip()]
+
     # Development
     mock_mode: bool = False  # Use mock service (no GPU required)
 

@@ -13,6 +13,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Audio enhancement dependencies (DeepFilterNet noise suppression + LavaSR bandwidth extension)
+enhancement = [
+    "deepfilternet>=0.5",
+    "LavaSR @ git+https://github.com/ysharma3501/LavaSR.git",
+    "soundfile>=0.12.1",
+]
 # Full TTS dependencies (for production with GPU)
 tts = [
     "qwen-tts>=0.1.0",

@@ -3,6 +3,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 interface AppConfig {
   enabledModelSizes: string[]
   mockMode: boolean
+  enhancementEnabled: boolean
+  enhancementMethods: string[]
 }
 
 // Default to both sizes when API unavailable (e.g., frontend-only dev)
@@ -10,6 +12,8 @@ interface AppConfig {
 const DEFAULT_CONFIG: AppConfig = {
   enabledModelSizes: ['1.7B', '0.6B'],
   mockMode: false,
+  enhancementEnabled: false,
+  enhancementMethods: [],
 }
 
 const ConfigContext = createContext<AppConfig>(DEFAULT_CONFIG)
@@ -32,6 +36,8 @@ export function ConfigProvider({ children }: ConfigProviderProps) {
         setConfig({
           enabledModelSizes: data.enabled_model_sizes || ['0.6B'],
           mockMode: data.mock_mode || false,
+          enhancementEnabled: data.enhancement_enabled || false,
+          enhancementMethods: data.enhancement_methods || [],
         })
       })
       .catch(() => {

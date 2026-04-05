@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from 'react'
-import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Sparkles } from 'lucide-react'
 import { AudioEditor, AudioEditorHandle } from './AudioEditor'
 import { Personality, Segment } from '../hooks/usePersonalities'
+import { useAppConfig } from '../context/ConfigContext'
 
 const LANGUAGES = [
   'Chinese', 'English', 'Japanese', 'Korean', 'German',
@@ -24,6 +25,7 @@ export function PersonalityForm({
   isLoading,
 }: PersonalityFormProps) {
   const isEditing = !!personality
+  const { enhancementEnabled, enhancementMethods } = useAppConfig()
 
   const [name, setName] = useState(personality?.name || '')
   const [description, setDescription] = useState(personality?.description || '')
@@ -33,6 +35,9 @@ export function PersonalityForm({
   const [segments, setSegments] = useState<Segment[]>(personality?.segments || [])
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [audioChanged, setAudioChanged] = useState(false)
+  const [autoEnhance, setAutoEnhance] = useState(false)
+  const [autoEnhanceMethod, setAutoEnhanceMethod] = useState('deepfilter')
+  const [autoEnhancePreset, setAutoEnhancePreset] = useState('medium')
 
   const audioEditorRef = useRef<AudioEditorHandle>(null)
 
@@ -115,6 +120,10 @@ export function PersonalityForm({
       formData.append('transcript', transcript.trim())
       formData.append('audio', originalFile, originalFile.name)
       formData.append('segments', JSON.stringify(currentSegments))
+      if (autoEnhance && enhancementEnabled) {
+        formData.append('enhancement_method', autoEnhanceMethod)
+        formData.append('enhancement_preset', autoEnhancePreset)
+      }
 
       await onSubmit(formData)
     }
@@ -211,6 +220,46 @@ export function PersonalityForm({
             isTranscribing={isTranscribing}
             label={isEditing ? 'Reference Audio (upload new to replace)' : 'Reference Audio *'}
           />
+
+          {/* Auto-enhance on save */}
+          {!isEditing && enhancementEnabled && enhancementMethods.length > 0 && (
+            <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoEnhance}
+                  onChange={(e) => setAutoEnhance(e.target.checked)}
+                  className="w-4 h-4 rounded accent-primary-500"
+                />
+                <Sparkles className="w-4 h-4 text-primary-400" />
+                <span className="text-sm font-medium text-slate-300">Auto-enhance audio before saving</span>
+              </label>
+              {autoEnhance && (
+                <div className="flex flex-wrap gap-2 pl-6">
+                  <select
+                    value={autoEnhanceMethod}
+                    onChange={(e) => setAutoEnhanceMethod(e.target.value)}
+                    className="select-field text-xs py-1 flex-1 min-w-[160px]"
+                  >
+                    {enhancementMethods.map((m) => (
+                      <option key={m} value={m}>
+                        {{ deepfilter: 'Denoise (DeepFilterNet)', lavasr: 'Enhance Quality (LavaSR)', chain: 'Full Enhancement (Denoise + Enhance)' }[m] ?? m}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={autoEnhancePreset}
+                    onChange={(e) => setAutoEnhancePreset(e.target.value)}
+                    className="select-field text-xs py-1 w-36"
+                  >
+                    <option value="light">Light (30%)</option>
+                    <option value="medium">Medium (70%)</option>
+                    <option value="aggressive">Aggressive (100%)</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit */}
           <div className="flex gap-3 pt-2">

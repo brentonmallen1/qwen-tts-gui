@@ -237,6 +237,7 @@ class PersonalityService:
             "original_url": original_url,
             "segments": segments,
             "audio_duration": audio_duration,
+            "enhancement_method": metadata.get("enhancement_method"),
             "created_at": metadata.get("created_at"),
             "updated_at": metadata.get("updated_at"),
         }
@@ -249,6 +250,7 @@ class PersonalityService:
         transcript: str,
         audio_data: bytes,
         segments: Optional[list[dict]] = None,
+        enhancement_method: Optional[str] = None,
     ) -> dict:
         """Create a new personality.
 
@@ -304,6 +306,7 @@ class PersonalityService:
             "description": description,
             "language": language,
             "segments": segments,
+            "enhancement_method": enhancement_method,
             "created_at": now,
             "updated_at": now,
         }

@@ -1,8 +1,9 @@
+import io
 import os
 import shutil
 import uuid
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from api.schemas import (
     VoiceCloneRequest,
@@ -19,6 +20,7 @@ from api.schemas import (
 from config import get_settings
 from auth import get_auth_dependency
 from logging_config import get_logger
+from services.audio_enhancement_service import audio_enhancement_service
 
 settings = get_settings()
 logger = get_logger()
@@ -65,6 +67,8 @@ async def get_config():
     return {
         "enabled_model_sizes": settings.enabled_sizes,
         "mock_mode": settings.mock_mode,
+        "enhancement_enabled": settings.enhancement_enabled,
+        "enhancement_methods": settings.enhancement_methods_list if settings.enhancement_enabled else [],
     }
 
 
@@ -182,6 +186,57 @@ async def generate_custom(request: CustomVoiceRequest):
             status_code=500,
             detail="Audio generation failed. Please try again or check your input."
         )
+
+
+_VALID_ENHANCE_METHODS = {"deepfilter", "lavasr", "chain"}
+_VALID_ENHANCE_PRESETS = {"light", "medium", "aggressive"}
+
+
+@router.post("/enhance")
+async def enhance_audio(
+    audio: UploadFile = File(...),
+    method: str = Form("deepfilter"),
+    preset: str = Form("medium"),
+):
+    """Enhance uploaded audio using ML-based noise suppression or quality enhancement.
+
+    Methods: deepfilter (denoise), lavasr (bandwidth extension), chain (both in sequence)
+    Presets: light (30% blend), medium (70% blend), aggressive (100% enhanced)
+    """
+    if not settings.enhancement_enabled:
+        raise HTTPException(status_code=503, detail="Audio enhancement is disabled")
+
+    if method not in _VALID_ENHANCE_METHODS:
+        raise HTTPException(status_code=400, detail=f"Invalid method. Choose: {', '.join(sorted(_VALID_ENHANCE_METHODS))}")
+
+    if preset not in _VALID_ENHANCE_PRESETS:
+        raise HTTPException(status_code=400, detail=f"Invalid preset. Choose: {', '.join(sorted(_VALID_ENHANCE_PRESETS))}")
+
+    if audio.size and audio.size > settings.max_upload_size:
+        max_mb = settings.max_upload_size // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {max_mb}MB")
+
+    if audio.content_type and audio.content_type not in settings.audio_types_set:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type '{audio.content_type}'. Allowed: WAV, MP3"
+        )
+
+    try:
+        audio_data = await audio.read()
+        enhanced_data = audio_enhancement_service.enhance(audio_data, method=method, preset=preset)
+        logger.info(f"Audio enhanced: method={method}, preset={preset}, size={len(enhanced_data)} bytes")
+        return StreamingResponse(
+            io.BytesIO(enhanced_data),
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=enhanced.wav"},
+        )
+    except RuntimeError as e:
+        # Enhancement library not installed
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"Audio enhancement failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Audio enhancement failed. Please try again.")
 
 
 @router.get("/audio/{filename}")

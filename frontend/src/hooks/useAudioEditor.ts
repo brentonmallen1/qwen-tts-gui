@@ -54,9 +54,15 @@ interface UseAudioEditorReturn {
   isGatheredStale: boolean
   gatherSegments: () => Promise<void>
   clearGatheredAudio: () => void
-  // Revert to original
+  // Revert to original segments
   canRevert: boolean
   revertToOriginal: () => void
+  // Audio enhancement
+  isEnhancing: boolean
+  enhancementError: string | null
+  canRevertEnhancement: boolean
+  enhanceAudio: (method: string, preset: string) => Promise<void>
+  revertEnhancement: () => void
 }
 
 // Generate unique colors for segments
@@ -93,6 +99,12 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const [gatheredAudioBlob, setGatheredAudioBlob] = useState<Blob | null>(null)
   const [gatheredAudioUrl, setGatheredAudioUrl] = useState<string | null>(null)
   const [gatheredSegments, setGatheredSegments] = useState<Segment[] | null>(null)
+
+  // Enhancement state
+  const preEnhancementBufferRef = useRef<Blob | null>(null)
+  const [isEnhancing, setIsEnhancing] = useState(false)
+  const [enhancementError, setEnhancementError] = useState<string | null>(null)
+  const [canRevertEnhancement, setCanRevertEnhancement] = useState(false)
 
   // Keep ref in sync with state for event handlers
   const setPlayMode = useCallback((mode: PlayMode) => {
@@ -290,6 +302,9 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setSegments([])
     setSelectedSegmentIndex(null)
     setOriginalSegments(null)
+    preEnhancementBufferRef.current = null
+    setCanRevertEnhancement(false)
+    setEnhancementError(null)
     regionsMapRef.current.clear()
 
     // Clear existing regions
@@ -501,6 +516,56 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     setGatheredAudioUrl(null)
   }, [gatheredAudioUrl])
 
+  const enhanceAudio = useCallback(async (method: string, preset: string) => {
+    if (!audioBufferRef.current || isEnhancing) return
+
+    setIsEnhancing(true)
+    setEnhancementError(null)
+
+    try {
+      // Save current audio as pre-enhancement snapshot for reverting
+      const currentBlob = audioBufferToWav(audioBufferRef.current)
+      preEnhancementBufferRef.current = currentBlob
+
+      // Build form data
+      const formData = new FormData()
+      formData.append('audio', currentBlob, 'audio.wav')
+      formData.append('method', method)
+      formData.append('preset', preset)
+
+      const response = await fetch('/api/enhance', { method: 'POST', body: formData })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.detail || `Enhancement failed (${response.status})`)
+      }
+
+      const enhancedBlob = await response.blob()
+
+      // Reload waveform with enhanced audio, preserving current segments
+      const currentSegments = [...segments].sort((a, b) => a.start - b.start)
+      await loadAudio(enhancedBlob, currentSegments.length > 0 ? currentSegments : undefined)
+
+      setCanRevertEnhancement(true)
+    } catch (err) {
+      preEnhancementBufferRef.current = null
+      setEnhancementError(err instanceof Error ? err.message : 'Enhancement failed')
+    } finally {
+      setIsEnhancing(false)
+    }
+  }, [isEnhancing, segments, loadAudio])
+
+  const revertEnhancement = useCallback(async () => {
+    if (!preEnhancementBufferRef.current) return
+
+    const snapshot = preEnhancementBufferRef.current
+    preEnhancementBufferRef.current = null
+    setCanRevertEnhancement(false)
+    setEnhancementError(null)
+
+    const currentSegments = [...segments].sort((a, b) => a.start - b.start)
+    await loadAudio(snapshot, currentSegments.length > 0 ? currentSegments : undefined)
+  }, [segments, loadAudio])
+
   const playSelection = useCallback(() => {
     if (!wavesurferRef.current || segments.length === 0) return
 
@@ -614,6 +679,11 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     clearGatheredAudio,
     canRevert,
     revertToOriginal,
+    isEnhancing,
+    enhancementError,
+    canRevertEnhancement,
+    enhanceAudio,
+    revertEnhancement,
   }
 }
 

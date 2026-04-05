@@ -229,6 +229,7 @@ PATCH  /api/personalities/{id}         - Update personality metadata (JSON)
 PUT    /api/personalities/{id}/audio   - Update personality audio (multipart form)
 DELETE /api/personalities/{id}         - Delete personality
 GET    /api/personalities/{id}/audio   - Get personality reference audio
+GET    /api/personalities/{id}/original - Get personality original uploaded audio (WAV)
 
 # Transcription
 POST /api/transcribe            - Transcribe audio with Whisper (multipart form)
@@ -239,6 +240,8 @@ GET  /api/health                - Health check
 GET  /api/models                - List available models
 GET  /api/speakers              - Get preset speakers
 GET  /api/languages             - Get supported languages
+GET  /api/config                - Get frontend configuration (enabled model sizes, mock mode, enhancement methods)
+POST /api/enhance               - Enhance audio quality (multipart: audio, method, preset)
 ```
 
 ## Development
