@@ -101,22 +101,35 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
     }
   }, [segments, isReady, onSegmentsChange])
 
-  // Handle keyboard delete
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if focus is on an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
+      // Delete/Backspace: remove selected segment
       if ((e.key === 'Delete' || e.key === 'Backspace') &&
           selectedSegmentIndex !== null &&
-          segments.length > 1 &&
-          // Don't delete if focus is on an input
-          !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+          segments.length > 1) {
         e.preventDefault()
         removeSegment(selectedSegmentIndex)
+        return
+      }
+
+      // Space: toggle play/pause
+      if (e.code === 'Space' && isReady) {
+        e.preventDefault()
+        if (isPlaying) {
+          stopPlayback()
+        } else {
+          playSelection()
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedSegmentIndex, segments.length, removeSegment])
+  }, [selectedSegmentIndex, segments.length, removeSegment, isReady, isPlaying, playSelection, stopPlayback])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -361,7 +374,7 @@ export const AudioEditor = forwardRef<AudioEditorHandle, AudioEditorProps>(funct
                 </div>
 
                 <p className="text-xs text-slate-500 mt-3">
-                  Drag segment edges to adjust. Click segment to select, then Delete key to remove.
+                  Drag segment edges to adjust. Click segment to select, then Delete to remove. Space to play/pause.
                 </p>
               </>
             )}

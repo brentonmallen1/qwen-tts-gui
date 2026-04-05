@@ -77,6 +77,7 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
   const regionsMapRef = useRef<Map<string, Region>>(new Map())
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioBufferRef = useRef<AudioBuffer | null>(null)
+  const optimalSegmentRef = useRef<{ start: number; end: number } | null>(null)
   const originalFileRef = useRef<File | null>(null)
   const pendingSourceRef = useRef<{ source: File | Blob | string; segments?: Segment[] } | null>(null)
   const playModeRef = useRef<PlayMode>('continue')
@@ -187,6 +188,9 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
           audioContextRef.current = ctx
           ctx.decodeAudioData(arrayBuffer).then(buffer => {
             audioBufferRef.current = buffer
+            if (!initSegs) {
+              optimalSegmentRef.current = findOptimalSegment(buffer, maxDuration)
+            }
           })
         }).catch(() => {})
       } else {
@@ -197,6 +201,9 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
           audioContextRef.current = ctx
           ctx.decodeAudioData(arrayBuffer).then(buffer => {
             audioBufferRef.current = buffer
+            if (!initSegs) {
+              optimalSegmentRef.current = findOptimalSegment(buffer, maxDuration)
+            }
           })
         })
       }
@@ -222,9 +229,12 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
           createRegion(seg.start, Math.min(seg.end, dur), i)
         })
       } else {
-        // Create single default region
-        const end = Math.min(dur, maxDuration)
-        createRegion(0, end, 0)
+        // Use optimal segment if available, otherwise default to start
+        const optimal = optimalSegmentRef.current
+        const start = optimal?.start ?? 0
+        const end = optimal?.end ?? Math.min(dur, maxDuration)
+        optimalSegmentRef.current = null
+        createRegion(start, end, 0)
       }
 
       syncRegionsToState()
@@ -300,6 +310,9 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
         const arrayBuffer = await response.arrayBuffer()
         audioContextRef.current = new AudioContext()
         audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer)
+        if (!initSegments) {
+          optimalSegmentRef.current = findOptimalSegment(audioBufferRef.current, maxDuration)
+        }
       } catch (err) {
         console.warn('Could not decode audio buffer from URL:', err)
       }
@@ -311,8 +324,11 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
       const arrayBuffer = await source.arrayBuffer()
       audioContextRef.current = new AudioContext()
       audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer)
+      if (!initSegments) {
+        optimalSegmentRef.current = findOptimalSegment(audioBufferRef.current, maxDuration)
+      }
     }
-  }, [])
+  }, [maxDuration])
 
   const addSegment = useCallback(() => {
     if (!regionsRef.current || !wavesurferRef.current || !isReady || segments.length >= maxSegments) return
@@ -599,6 +615,75 @@ export function useAudioEditor(options: UseAudioEditorOptions = {}): UseAudioEdi
     canRevert,
     revertToOriginal,
   }
+}
+
+// Find the best contiguous window in an AudioBuffer for voice cloning.
+// Scores candidate windows by RMS energy (prefer speech) penalized by
+// standard deviation (prefer consistent speech over bursts + silence).
+function findOptimalSegment(
+  audioBuffer: AudioBuffer,
+  targetDuration: number = 20,
+  analysisWindowMs: number = 100
+): { start: number; end: number } {
+  const sampleRate = audioBuffer.sampleRate
+  const duration = audioBuffer.duration
+
+  if (duration <= targetDuration) {
+    return { start: 0, end: duration }
+  }
+
+  // Mix all channels to mono for analysis
+  const numChannels = audioBuffer.numberOfChannels
+  const totalSamples = audioBuffer.length
+  const samples = new Float32Array(totalSamples)
+  for (let ch = 0; ch < numChannels; ch++) {
+    const chData = audioBuffer.getChannelData(ch)
+    for (let i = 0; i < totalSamples; i++) {
+      samples[i] += chData[i] / numChannels
+    }
+  }
+
+  // Compute RMS energy for each analysis window
+  const windowSamples = Math.floor(analysisWindowMs / 1000 * sampleRate)
+  const numWindows = Math.floor(totalSamples / windowSamples)
+  const rmsValues = new Float32Array(numWindows)
+  for (let w = 0; w < numWindows; w++) {
+    const start = w * windowSamples
+    let sumSq = 0
+    for (let i = start; i < start + windowSamples; i++) {
+      sumSq += samples[i] * samples[i]
+    }
+    rmsValues[w] = Math.sqrt(sumSq / windowSamples)
+  }
+
+  // Slide a window of targetDuration across the audio and score each position.
+  // Score = mean RMS / (1 + stdDev): rewards consistent high-energy speech.
+  const windowsPerSegment = Math.floor(targetDuration / (analysisWindowMs / 1000))
+  let bestScore = -1
+  let bestStartWindow = 0
+
+  for (let startW = 0; startW <= numWindows - windowsPerSegment; startW++) {
+    let sum = 0
+    for (let i = startW; i < startW + windowsPerSegment; i++) {
+      sum += rmsValues[i]
+    }
+    const mean = sum / windowsPerSegment
+
+    let varSum = 0
+    for (let i = startW; i < startW + windowsPerSegment; i++) {
+      varSum += (rmsValues[i] - mean) ** 2
+    }
+    const stdDev = Math.sqrt(varSum / windowsPerSegment)
+
+    const score = mean / (1 + stdDev)
+    if (score > bestScore) {
+      bestScore = score
+      bestStartWindow = startW
+    }
+  }
+
+  const startTime = bestStartWindow * (analysisWindowMs / 1000)
+  return { start: startTime, end: Math.min(startTime + targetDuration, duration) }
 }
 
 // Helper function to convert AudioBuffer to WAV Blob
